@@ -22,7 +22,6 @@ const ProfileSidebar = () => {
     <div className="w-full lg:w-80 order-1 lg:order-2 flex-shrink-0">
       <div className="bg-white/5 backdrop-blur-lg rounded-3xl p-6 h-full border border-yellow-400/20 shadow-2xl">
         
-        {/* Profile Image */}
         <div className="flex justify-center mb-6">
           <div className="w-32 h-32 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-600 p-1">
             <img 
@@ -50,7 +49,6 @@ const ProfileSidebar = () => {
         </div>
         
         <div className="flex flex-col items-center space-y-6 mt-6">
-      {/* --- Sosyal İkonlar --- */}
       <div className="flex space-x-4">
         <a
           href="https://github.com/hburakdemir"
@@ -69,8 +67,6 @@ const ProfileSidebar = () => {
           <Linkedin className="w-5 h-5 text-white" />
         </a>
       </div>
-
-      {/* --- CV İndir Butonu --- */}
       <a
         href={resumeLink}
         download

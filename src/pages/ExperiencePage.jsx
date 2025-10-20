@@ -20,9 +20,7 @@ const ExperienceSection = ({ currentExperience, setCurrentExperience }) => {
         {language === 'tr' ? 'Deneyimler' : 'Experience'}
       </h2>
      
-      {/* Slider Container */}
       <div className="relative">
-        {/* Cards Container */}
         <div className="overflow-hidden">
           <div 
             className="flex transition-transform duration-700 ease-in-out"
@@ -55,8 +53,6 @@ const ExperienceSection = ({ currentExperience, setCurrentExperience }) => {
             ))}
           </div>
         </div>
-
-        {/* Navigation Buttons */}
         <button
           onClick={prevExperience}
           className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-gray-700/80 backdrop-blur rounded-full hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 z-10"
@@ -72,7 +68,6 @@ const ExperienceSection = ({ currentExperience, setCurrentExperience }) => {
         </button>
       </div>
 
-      {/* Dots Indicator */}
       <div className="flex justify-center space-x-2 pt-4">
         {experiences.map((_, index) => (
           <button
@@ -87,7 +82,6 @@ const ExperienceSection = ({ currentExperience, setCurrentExperience }) => {
         ))}
       </div>
      
-      {/* CSS for line-clamp */}
       <style jsx>{`
         .line-clamp-6 {
           display: -webkit-box;

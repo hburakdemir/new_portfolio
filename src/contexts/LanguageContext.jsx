@@ -12,7 +12,7 @@ export const useLanguage = () => {
 };
 
 export const LanguageProvider = ({ children }) => {
-  const [language, setLanguage] = useState('tr'); // Default Turkish
+  const [language, setLanguage] = useState('tr'); 
 
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'tr' ? 'en' : 'tr');
@@ -26,7 +26,7 @@ export const LanguageProvider = ({ children }) => {
       value = value?.[k];
     }
     
-    return value || key; // Fallback to key if translation not found
+    return value || key;
   };
 
   const value = {

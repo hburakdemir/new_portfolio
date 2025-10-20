@@ -25,7 +25,7 @@ const Profile = () => {
         <div className="flex justify-center mb-6">
           <div className="w-32 h-32 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-600 p-1">
             <img 
-              src="../../public/images/ben2.jpg"
+              src="../../public/images/ben2.png"
               alt="Profile"
               className="w-full h-full rounded-full object-cover"
             />

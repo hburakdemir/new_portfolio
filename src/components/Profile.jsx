@@ -2,7 +2,7 @@ import React from 'react';
 import { Mail, Phone, MapPin, Github, Linkedin,Download } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
-const ProfileSidebar = () => {
+const Profile = () => {
   const { language } = useLanguage();
 
   const profile = {
@@ -81,4 +81,4 @@ const ProfileSidebar = () => {
   );
 };
 
-export default ProfileSidebar;
+export default Profile;

@@ -6,7 +6,8 @@ import ExperiencePage from './pages/ExperiencePage';
 import EducationPage from './pages/EducationPage';
 import PortfolioPage from './pages/PortfolioPage';
 import SkillsPage from './pages/SkillsPage';
-import ProfileSidebar from './components/ProfileSidebar';
+// import ProfileSidebar from './components/ProfileSidebar';
+import Profile from './components/Profile';
 import ProjectModal from './components/ProjectModal';
 import LanguageToggle from './components/LanguageToggle';
 
@@ -72,7 +73,7 @@ const PortfolioWebsite = () => {
             </div>
 
             {/* Profile Sidebar */}
-            <ProfileSidebar />
+            <Profile />
           </div>
 
           {/* Skills Section - Full width below main content */}

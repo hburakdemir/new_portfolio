@@ -33,13 +33,27 @@ const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 // on each side for the line/points — independent of FACE_WIDTH, which is
 // the *card's* responsive size, not the strip's.
 const POINT_SPAN = 220 - 24 * 2;
+const HALF_SPAN = POINT_SPAN / 2;
+// A single gentle hill across the whole strip (not one bump per project) —
+// peak at center, easing down toward each edge. Matches the visible SVG
+// arc below, so the car riding this same curve actually looks like it's
+// sitting on the drawn line rather than floating over/under it.
+const ROAD_PEAK_Y = -8;
+const ROAD_EDGE_Y = 7;
+const roadY = (xRel) => {
+  const t = clamp(xRel / HALF_SPAN, -1, 1);
+  return ROAD_PEAK_Y + (ROAD_EDGE_Y - ROAD_PEAK_Y) * t * t;
+};
 
-// Mobile answer to the desktop road scene: no pinned scroll, no elevation —
-// everything fits in one screen. The car sits fixed at the top and just
-// "steers" toward whichever way you're dragging; the actual navigation is
-// the same one-physical-face-per-item turntable the Experience cube uses
-// (proven: drag-to-rotate, settle-to-nearest, animatingRef guarding against
-// the rapid-click glitch), just with N=project-count faces instead of 6.
+// Mobile answer to the desktop road scene: no pinned scroll, no scroll-tied
+// pin — everything fits in one screen. The actual navigation is the same
+// one-physical-face-per-item turntable the Experience cube uses (proven:
+// drag-to-rotate, settle-to-nearest, animatingRef guarding against the
+// rapid-click glitch), just with N=project-count faces instead of 6. The
+// car's road position is derived every frame from the stage's own rotation
+// angle (during drag *and* during the settle tween, so it keeps up whether
+// you're dragging the car, dragging the card, or pressing a button), so it
+// can never drift out of sync with which project is actually in front.
 export default function ProjectCarCarousel({ projects, language, onSelect }) {
   const N = projects.length;
   const SEGMENT = 360 / N;
@@ -64,24 +78,18 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
   const animatingRef = useRef(false);
   const dragRef = useRef({ dragging: false, startX: 0, startAngle: 0, moved: false });
 
-  // The car's road position is derived from the stage's own rotation angle
-  // (clamped to the 0..N-1 project range, since the strip is a straight
-  // line — it can't represent the turntable wrapping all the way around)
-  // rather than tracked separately, so it can never drift out of sync with
-  // which project is actually in front — that was the "araba ve yolun
-  // konumu eş değil" bug: the car used to just spring back to dead-center
-  // on release regardless of which project you'd landed on.
   const progressToX = (p) => (p / (N - 1) - 0.5) * POINT_SPAN;
   const angleToProgress = (angle) => clamp(-angle / SEGMENT, 0, N - 1);
 
   const updateCar = () => {
     const angle = gsap.getProperty(stageRef.current, 'rotateY') || 0;
-    gsap.set(carRef.current, { x: progressToX(angleToProgress(angle)) });
+    const x = progressToX(angleToProgress(angle));
+    gsap.set(carRef.current, { x, y: roadY(x) });
   };
 
   useEffect(() => {
     updateCar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, to set the car's initial position
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, to place the car correctly before any interaction
   }, []);
 
   const settleTo = (targetAngle, duration) => {
@@ -119,9 +127,8 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
     if (Math.abs(dx) > 3) d.moved = true;
     const liveAngle = d.startAngle + dx * 0.4;
     gsap.set(stageRef.current, { rotateY: liveAngle });
-    // The car's base x already tracks the drag via the angle above; layer a
-    // small extra tilt on top purely for tactile "steering" feedback.
-    gsap.set(carRef.current, { x: progressToX(angleToProgress(liveAngle)), rotate: clamp(dx * 0.05, -6, 6) });
+    updateCar();
+    gsap.set(carRef.current, { rotate: clamp(dx * 0.05, -6, 6) });
   };
 
   const onPointerUp = () => {
@@ -146,16 +153,31 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
       >
-        <div className="absolute inset-x-6 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-black/10" />
-        {projects.map((project, i) => (
-          <span
-            key={project.id}
-            className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform ${
-              i === frontIndex ? 'scale-150' : ''
-            }`}
-            style={{ left: `calc(50% + ${progressToX(i)}px)`, backgroundColor: pointColors[i] }}
-          />
-        ))}
+        <svg
+          className="absolute inset-x-6 top-1/2 h-6 w-[172px] -translate-y-1/2"
+          viewBox="0 0 172 24"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path d="M0,19 Q86,4 172,19" stroke="rgba(0,0,0,0.12)" strokeWidth="3" fill="none" strokeLinecap="round" />
+        </svg>
+
+        {/* One point per project, laid out left-to-right along the road —
+            "her projede sağda ve solda bir nokta gösterilmeli" — each on
+            its own random color, riding the same hill curve as the car. */}
+        {projects.map((project, i) => {
+          const x = progressToX(i);
+          return (
+            <span
+              key={project.id}
+              className={`absolute left-1/2 top-1/2 h-2 w-2 rounded-full transition-transform duration-300 ${
+                i === frontIndex ? 'scale-150' : ''
+              }`}
+              style={{ transform: `translate(calc(-50% + ${x}px), calc(-50% + ${roadY(x)}px))`, backgroundColor: pointColors[i] }}
+            />
+          );
+        })}
+
         <div
           ref={carRef}
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing"

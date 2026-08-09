@@ -8,7 +8,7 @@ import useReducedMotion from '../hooks/useReducedMotion';
 // sola kayabilir" — pausing the autoplay while a drag is in progress.
 const Row = ({ items, reverse }) => {
   const trackRef = useRef(null);
-  const dragRef = useRef({ dragging: false, startX: 0, startScroll: 0 });
+  const dragRef = useRef({ tracking: false, confirmed: false, startX: 0, startY: 0, startScroll: 0, pointerId: null });
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -27,7 +27,7 @@ const Row = ({ items, reverse }) => {
 
     let raf;
     const tick = () => {
-      if (!dragRef.current.dragging) {
+      if (!dragRef.current.confirmed) {
         const half = el.scrollWidth / 2;
         el.scrollLeft += speed;
         if (el.scrollLeft >= half) el.scrollLeft -= half;
@@ -40,21 +40,49 @@ const Row = ({ items, reverse }) => {
   }, [reverse, reducedMotion]);
 
   const onPointerDown = (e) => {
-    dragRef.current = { dragging: true, startX: e.clientX, startScroll: trackRef.current.scrollLeft };
-    trackRef.current.setPointerCapture(e.pointerId);
+    // Don't commit to "this is a horizontal drag" yet — on touch, a
+    // vertical page-scroll swipe very often starts with a touchdown
+    // *on* this row (it's a wide strip most fingers cross), and grabbing
+    // pointer capture immediately fought the browser's native vertical
+    // scroll, leaving the row looking "stuck" under a scrolling thumb.
+    dragRef.current = {
+      tracking: true,
+      confirmed: false,
+      startX: e.clientX,
+      startY: e.clientY,
+      startScroll: trackRef.current.scrollLeft,
+      pointerId: e.pointerId,
+    };
   };
+
   const onPointerMove = (e) => {
-    if (!dragRef.current.dragging) return;
-    trackRef.current.scrollLeft = dragRef.current.startScroll - (e.clientX - dragRef.current.startX);
+    const d = dragRef.current;
+    if (!d.tracking) return;
+    const dx = e.clientX - d.startX;
+
+    if (!d.confirmed) {
+      const dy = e.clientY - d.startY;
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return; // not enough movement to tell yet
+      if (Math.abs(dy) >= Math.abs(dx)) {
+        d.tracking = false; // vertical intent — hand this gesture back to the page scroll
+        return;
+      }
+      d.confirmed = true;
+      trackRef.current.setPointerCapture(d.pointerId);
+    }
+
+    trackRef.current.scrollLeft = d.startScroll - dx;
   };
+
   const endDrag = () => {
-    dragRef.current.dragging = false;
+    dragRef.current.tracking = false;
+    dragRef.current.confirmed = false;
   };
 
   return (
     <div
       ref={trackRef}
-      className="no-scrollbar flex cursor-grab gap-4 overflow-x-auto active:cursor-grabbing"
+      className="no-scrollbar flex cursor-grab touch-pan-y gap-4 overflow-x-auto active:cursor-grabbing"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

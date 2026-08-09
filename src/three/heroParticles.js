@@ -1,12 +1,15 @@
-// Hero "signal constellation" — particles assemble into the HBD monogram on
-// load and stay in constant restless motion (never a perfectly static
-// shape) from then on. No scroll linkage: forms once, stays formed.
+// Hero "signal constellation" — particles start scattered on load and
+// settle into the HBD monogram as the user scrolls down through the hero
+// ("aşağı kaydırınca ... birleşsin"), staying in constant restless motion
+// (never a perfectly static shape) throughout.
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { tokens } from '../lib/tokens.js';
 
 const MONOGRAM = 'HBD';
 const FONT = '"Inter Variable", -apple-system, sans-serif';
+const CAMERA_FOV = 45;
+const CAMERA_Z = 6;
 
 function sampleMonogramPixels({ isMobile }) {
   const fontSize = isMobile ? 150 : 220;
@@ -117,7 +120,7 @@ function fallbackCandidates(count) {
   return { candidates, width: 2, height: 2, isFallback: true };
 }
 
-export async function initHeroParticles(container, { theme = 'dark', xOffset = 0 } = {}) {
+export async function initHeroParticles(container, { theme = 'dark', xOffset = 0, cancelToken } = {}) {
   if (!container) return null;
 
   let renderer;
@@ -142,6 +145,21 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     /* proceed with whatever font is available */
   }
 
+  // React 19 StrictMode's dev mount->unmount->mount double-invokes the
+  // effect that calls this function. Without this check, the *first*
+  // (discarded) invocation's cleanup would run *before* this async function
+  // resumes from the await above — by which point the caller's `cancelled`
+  // flag is already true, but that flag only gates whether the caller
+  // *stores* this instance for later disposal, not whether this function
+  // keeps going. Left unchecked, the first invocation would still finish
+  // building a whole second WebGL scene, append a second <canvas>, and
+  // start a second permanent render loop — a leaked instance nothing ever
+  // disposes, silently rendering on top of (or beneath) the real one.
+  if (cancelToken?.cancelled) {
+    renderer.dispose();
+    return null;
+  }
+
   let sample = sampleMonogramPixels({ isMobile });
   if (sample.candidates.length === 0) sample = fallbackCandidates(COUNT);
   const { candidates, width, height, textWidthPx } = sample;
@@ -149,8 +167,18 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
 
   // World units per canvas px, derived from the measured text WIDTH (the
   // inline "HBD" mark's defining dimension) so the whole word fits inside
-  // the camera frustum width instead of only a fragment of it.
-  const SCALE = (isMobile ? 2.6 : 3.8) / (textWidthPx || width);
+  // the camera frustum width instead of only a fragment of it. The frustum
+  // itself is computed from the *container's own aspect ratio* — on mobile
+  // this container went from a short, roughly-square confined box to a
+  // full-bleed, very tall/narrow one, which shrinks the frustum's width a
+  // lot (frustum width = frustum height × aspect, and frustum height is
+  // fixed by fov/z). A fixed world-unit target tuned for the old aspect no
+  // longer fit the new, narrower one and rendered as a cropped sliver.
+  const aspect = container.clientWidth / Math.max(1, container.clientHeight);
+  const frustumHeight = 2 * CAMERA_Z * Math.tan((CAMERA_FOV * Math.PI) / 360);
+  const frustumWidth = frustumHeight * aspect;
+  const targetWorldWidth = frustumWidth * (isMobile ? 0.8 : 0.5);
+  const SCALE = targetWorldWidth / (textWidthPx || width);
   const toWorld = (px, py) => [(px - width / 2) * SCALE, -(py - height / 2) * SCALE];
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
@@ -161,13 +189,8 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(
-    45,
-    container.clientWidth / Math.max(1, container.clientHeight),
-    0.1,
-    100
-  );
-  camera.position.z = 6;
+  const camera = new THREE.PerspectiveCamera(CAMERA_FOV, aspect, 0.1, 100);
+  camera.position.z = CAMERA_Z;
 
   const targets = new Float32Array(COUNT * 3);
   const scatters = new Float32Array(COUNT * 3);
@@ -221,9 +244,16 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
+  // Dot size has to track SCALE, not be a fixed world-unit constant — 0.045
+  // was tuned for desktop's SCALE (~0.0085), but on the full-bleed mobile
+  // container (tall/narrow aspect → much narrower frustum → smaller SCALE
+  // to fit "HBD" inside it) that same fixed size became huge *relative to*
+  // the now-smaller letterforms, so neighboring dots overlapped into a
+  // blurry blob instead of reading as distinct strokes. 5.3 reproduces the
+  // known-good 0.045 at desktop's own SCALE and scales proportionally below it.
   const baseOpacity = theme === 'light' ? 1 : 0.92;
   const mat = new THREE.PointsMaterial({
-    size: 0.045,
+    size: SCALE * 5.3,
     map: makeSprite(),
     vertexColors: true,
     transparent: true,
@@ -236,13 +266,16 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
   const points = new THREE.Points(geo, mat);
   scene.add(points);
 
+  // `assemble` is the smoothed value actually rendered; `targetAssemble` is
+  // set directly from scroll progress (0 at hero top = scattered, ->1 partway
+  // down = settled) and eased toward every frame below, so scrubbing feels
+  // like a weighted "landing" rather than 1:1 scroll-lock.
   const state = { assemble: 0 };
+  let targetAssemble = 0;
   let cursor = null;
   let visible = true;
   let pageVisible = !document.hidden;
   let disposed = false;
-
-  gsap.to(state, { assemble: 1, duration: 2.2, ease: 'power3.inOut' });
 
   const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const ndc = new THREE.Vector2();
@@ -274,6 +307,7 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     elapsed += dt;
     const t = elapsed;
 
+    state.assemble += (targetAssemble - state.assemble) * Math.min(1, dt * 3);
     const p = state.assemble;
 
     for (let i = 0; i < COUNT; i++) {
@@ -345,5 +379,12 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     renderer.domElement.remove();
   };
 
-  return { dispose };
+  return {
+    dispose,
+    // Driven by hero scroll progress (0 at top = scattered, ->1 partway
+    // down the hero = settled into HBD).
+    setAssemble(p) {
+      targetAssemble = p;
+    },
+  };
 }

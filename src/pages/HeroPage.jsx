@@ -48,11 +48,9 @@ export default function HeroPage() {
       ref={sectionRef}
       className="section-light relative flex min-h-[100svh] w-full flex-col overflow-hidden"
     >
-      {isDesktop && (
-        <div className="hero-visual pointer-events-none absolute inset-0">
-          <HeroCanvas xOffset={1.7} />
-        </div>
-      )}
+      <div className="hero-visual pointer-events-none absolute inset-0">
+        <HeroCanvas xOffset={isDesktop ? 1.7 : 0} />
+      </div>
 
       <div className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-stretch gap-10 px-6 pb-16 pt-32 md:grid-cols-2 md:px-10 md:pt-40">
         <div className="flex flex-col justify-between">
@@ -117,13 +115,7 @@ export default function HeroPage() {
           </div>
         </div>
 
-        {isDesktop ? (
-          <div aria-hidden="true" />
-        ) : (
-          <div className="hero-visual relative min-h-[320px]">
-            <HeroCanvas />
-          </div>
-        )}
+        {isDesktop && <div aria-hidden="true" />}
       </div>
     </section>
   );

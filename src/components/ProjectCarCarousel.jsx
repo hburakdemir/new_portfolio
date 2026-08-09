@@ -27,6 +27,12 @@ function useFaceWidth() {
 }
 
 const wrap = (i, n) => ((i % n) + n) % n;
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+// The road strip is a fixed max-w-[220px] box with inset-x-6 (24px) margins
+// on each side for the line/points — independent of FACE_WIDTH, which is
+// the *card's* responsive size, not the strip's.
+const POINT_SPAN = 220 - 24 * 2;
 
 // Mobile answer to the desktop road scene: no pinned scroll, no elevation —
 // everything fits in one screen. The car sits fixed at the top and just
@@ -50,14 +56,33 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
   const stageRef = useRef(null);
   const carRef = useRef(null);
   const [frontIndex, setFrontIndex] = useState(0);
+  // One random hue per project, generated once — "her nokta farklı renkte
+  // olmalı rastgele."
+  const [pointColors] = useState(() => projects.map(() => `hsl(${Math.floor(Math.random() * 360)} 70% 55%)`));
 
   const angleRef = useRef(0);
   const animatingRef = useRef(false);
   const dragRef = useRef({ dragging: false, startX: 0, startAngle: 0, moved: false });
 
-  const settleCar = (duration) => {
-    gsap.to(carRef.current, { x: 0, rotate: 0, duration, ease: 'elastic.out(1, 0.6)' });
+  // The car's road position is derived from the stage's own rotation angle
+  // (clamped to the 0..N-1 project range, since the strip is a straight
+  // line — it can't represent the turntable wrapping all the way around)
+  // rather than tracked separately, so it can never drift out of sync with
+  // which project is actually in front — that was the "araba ve yolun
+  // konumu eş değil" bug: the car used to just spring back to dead-center
+  // on release regardless of which project you'd landed on.
+  const progressToX = (p) => (p / (N - 1) - 0.5) * POINT_SPAN;
+  const angleToProgress = (angle) => clamp(-angle / SEGMENT, 0, N - 1);
+
+  const updateCar = () => {
+    const angle = gsap.getProperty(stageRef.current, 'rotateY') || 0;
+    gsap.set(carRef.current, { x: progressToX(angleToProgress(angle)) });
   };
+
+  useEffect(() => {
+    updateCar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, to set the car's initial position
+  }, []);
 
   const settleTo = (targetAngle, duration) => {
     if (animatingRef.current) return;
@@ -66,13 +91,14 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
       rotateY: targetAngle,
       duration,
       ease: 'power2.inOut',
+      onUpdate: updateCar,
       onComplete() {
         angleRef.current = targetAngle;
         setFrontIndex(wrap(Math.round(-targetAngle / SEGMENT), N));
         animatingRef.current = false;
       },
     });
-    settleCar(reducedMotion ? 0.001 : 0.5);
+    gsap.to(carRef.current, { rotate: 0, duration: reducedMotion ? 0.001 : 0.5, ease: 'elastic.out(1, 0.6)' });
   };
 
   const turn = (direction) => {
@@ -91,13 +117,11 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
     if (!d.dragging) return;
     const dx = e.clientX - d.startX;
     if (Math.abs(dx) > 3) d.moved = true;
-    gsap.set(stageRef.current, { rotateY: d.startAngle + dx * 0.4 });
-    // A wide, clearly-left-right slide is the point here — the earlier
-    // ±16px/±8° version read as the car tilting/bobbing in place rather
-    // than sliding, since the rotation was visually more obvious than the
-    // small lateral shift.
-    const nudge = Math.max(-60, Math.min(60, dx * 0.4));
-    gsap.set(carRef.current, { x: nudge, rotate: nudge * 0.12 });
+    const liveAngle = d.startAngle + dx * 0.4;
+    gsap.set(stageRef.current, { rotateY: liveAngle });
+    // The car's base x already tracks the drag via the angle above; layer a
+    // small extra tilt on top purely for tactile "steering" feedback.
+    gsap.set(carRef.current, { x: progressToX(angleToProgress(liveAngle)), rotate: clamp(dx * 0.05, -6, 6) });
   };
 
   const onPointerUp = () => {
@@ -105,7 +129,7 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
     if (!d.dragging) return;
     d.dragging = false;
     if (!d.moved) {
-      settleCar(reducedMotion ? 0.001 : 0.4);
+      gsap.to(carRef.current, { rotate: 0, duration: reducedMotion ? 0.001 : 0.3, ease: 'power2.out' });
       return;
     }
     const current = gsap.getProperty(stageRef.current, 'rotateY');
@@ -123,10 +147,15 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
         onPointerLeave={onPointerUp}
       >
         <div className="absolute inset-x-6 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-black/10" />
-        <div className="absolute inset-x-6 top-1/2 flex -translate-y-1/2 justify-between">
-          <span className="h-1.5 w-1.5 rounded-full bg-black/15" />
-          <span className="h-1.5 w-1.5 rounded-full bg-black/15" />
-        </div>
+        {projects.map((project, i) => (
+          <span
+            key={project.id}
+            className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform ${
+              i === frontIndex ? 'scale-150' : ''
+            }`}
+            style={{ left: `calc(50% + ${progressToX(i)}px)`, backgroundColor: pointColors[i] }}
+          />
+        ))}
         <div
           ref={carRef}
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing"

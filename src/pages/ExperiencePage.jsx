@@ -15,7 +15,12 @@ const wrap = (i) => ((i % N) + N) % N;
 
 const MAX_FACE_WIDTH = 340;
 const FACE_ASPECT = 380 / 340;
-const VIEWPORT_MARGIN = 96; // room either side for the peeking neighbor faces, not just the front one
+// Reserves room for the peeking neighbor faces *and* a clearly visible gap
+// from the viewport edge — 96px produced a face sized to fill almost
+// exactly what was left after the section's own padding, leaving under 1px
+// of real slack for `mx-auto` to center into (i.e. no visible padding at
+// all, just an edge-to-edge card).
+const VIEWPORT_MARGIN = 120;
 
 // Fixed pixel sizing (translateZ needs real px, not %) — but the fixed
 // 340px face used to simply overflow anything narrower than that (most
@@ -172,10 +177,10 @@ const ExperiencePage = () => {
         </h2>
       </div>
 
-      <div className="mx-auto mt-14 w-full max-w-5xl select-none px-4 sm:px-10 md:px-16">
+      <div className="mx-auto mt-14 w-full max-w-5xl select-none">
         <div
           className="relative mx-auto touch-pan-y"
-          style={{ width: FACE_WIDTH, height: FACE_HEIGHT, perspective: '1400px' }}
+          style={{ width: FACE_WIDTH, height: FACE_HEIGHT, perspective: '2600px' }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -192,7 +197,7 @@ const ExperiencePage = () => {
                 ref={(el) => {
                   faceRefs.current[i] = el;
                 }}
-                className="absolute inset-0 flex flex-col justify-center overflow-hidden rounded-[28px] border border-black/[0.06] bg-white/90 bg-[radial-gradient(120%_120%_at_10%_0%,rgba(0,113,227,0.10),transparent_55%),radial-gradient(120%_120%_at_100%_100%,rgba(41,151,255,0.08),transparent_55%)] p-7 shadow-[0_20px_50px_-25px_rgba(0,0,0,0.25)] backdrop-blur-2xl"
+                className="absolute inset-0 flex flex-col justify-center overflow-hidden rounded-[28px] border border-black/[0.06] bg-white/95 bg-[radial-gradient(120%_120%_at_10%_0%,rgba(0,113,227,0.10),transparent_55%),radial-gradient(120%_120%_at_100%_100%,rgba(41,151,255,0.08),transparent_55%)] p-7 shadow-[0_20px_50px_-25px_rgba(0,0,0,0.25)]"
                 style={{
                   transform: `rotateY(${i * SEGMENT}deg) translateZ(${RADIUS}px)`,
                   backfaceVisibility: 'hidden',

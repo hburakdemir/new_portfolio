@@ -6,7 +6,7 @@ import SkillsMarquee from '../components/SkillsMarquee';
 
 const stats = [
   { value: '1-2', label: { tr: 'Yıl Deneyim', en: 'Years Experience' } },
-  { value: '8+', label: { tr: 'Tamamlanan Proje', en: 'Shipped Projects' } },
+  { value: '15+', label: { tr: 'Tamamlanan Proje', en: 'Shipped Projects' } },
   { value: '10+', label: { tr: 'Teknoloji', en: 'Technologies' } },
   { value: 'Ankara', label: { tr: 'Konum', en: 'Location' } },
 ];

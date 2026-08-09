@@ -2,6 +2,25 @@ import { WindArrowDown } from "lucide-react";
 
 const portfolioProjects = [
   {
+    id: 9,
+    title: { tr: "Calio", en: "Calio" },
+    image: "/images/calio.webp",
+    category: { tr: "SaaS / Proje Yönetimi", en: "SaaS / Project Management" },
+    tech: [
+      "Vite",
+      "Vanilla JS",
+      "Node.js",
+      "WebRTC",
+      "Three.js",
+      "Nginx",
+    ],
+    description: {
+      tr: "Kanban panoları, ekip sohbeti, sesli/görüntülü arama, takvim ve değiştirilemez denetim kaydını tek uygulamada birleştiren self-hosted proje yönetim platformu. Jira, Trello, Azure DevOps ve Notion'dan tek tıkla içe aktarım; veriler müşterinin kendi sunucusunda kalır.",
+      en: "Self-hosted project management platform combining kanban boards, team chat, voice/video calls, calendar and an immutable audit log in one app. One-click import from Jira, Trello, Azure DevOps and Notion; customer data never leaves their own server.",
+    },
+    link: "calio.space",
+  },
+  {
     id: 1,
     title: { tr: "Nottepe.com", en: "Nottepe.com" },
     image: "/images/nottepe2.png",

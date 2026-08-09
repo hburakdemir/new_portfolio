@@ -1,97 +1,214 @@
-import React from 'react';
+import { useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import experiences from '../data/experiencesData';
 import { useLanguage } from '../contexts/LanguageContext';
+import useGsapContext from '../hooks/useGsapContext';
+import useReducedMotion from '../hooks/useReducedMotion';
 
-const ExperienceSection = ({ currentExperience, setCurrentExperience }) => {
+const eyebrow = { tr: 'Deneyim', en: 'Experience' };
+const heading = { tr: 'İş Deneyimlerim', en: 'Where I’ve Worked' };
+
+const N = experiences.length;
+const SEGMENT = 360 / N;
+const wrap = (i) => ((i % N) + N) % N;
+
+const MAX_FACE_WIDTH = 340;
+const FACE_ASPECT = 380 / 340;
+const VIEWPORT_MARGIN = 96; // room either side for the peeking neighbor faces, not just the front one
+
+// Fixed pixel sizing (translateZ needs real px, not %) — but the fixed
+// 340px face used to simply overflow anything narrower than that (most
+// phones), clipping or forcing page-level horizontal scroll. Recomputed on
+// resize so the cube always fits, peeking neighbors included.
+function useFaceSize() {
+  const getWidth = () =>
+    typeof window === 'undefined'
+      ? MAX_FACE_WIDTH
+      : Math.max(220, Math.min(MAX_FACE_WIDTH, window.innerWidth - VIEWPORT_MARGIN));
+
+  const [width, setWidth] = useState(getWidth);
+
+  useEffect(() => {
+    const onResize = () => setWidth(getWidth());
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  return { width, height: Math.round(width * FACE_ASPECT) };
+}
+
+function Face({ exp, language }) {
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-sans text-lg font-semibold text-ink">{exp.title[language]}</h3>
+        <span className="text-xs font-medium text-muted">{exp.period}</span>
+      </div>
+      <p className="mt-1 text-sm text-accent">{exp.company[language]}</p>
+      <p className="mt-4 line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-ink/60">
+        {exp.description[language]}
+      </p>
+    </>
+  );
+}
+
+const ExperiencePage = () => {
   const { language } = useLanguage();
-  
-  const nextExperience = () => {
-    setCurrentExperience((prev) => (prev + 1) % experiences.length);
+  const reducedMotion = useReducedMotion();
+  const sectionRef = useRef(null);
+  const stageRef = useRef(null);
+  const [frontIndex, setFrontIndex] = useState(0);
+  const { width: FACE_WIDTH, height: FACE_HEIGHT } = useFaceSize();
+  // One physical face per experience (no content recycling needed) — at
+  // N=6, 60° apart, neighbors sit at a real angle rather than edge-on, so
+  // they stay a little visible at rest instead of vanishing, per request.
+  // The 1.2x multiplier pushes faces past the exact edge-to-edge hexagon
+  // radius, opening a visible gap between the front face and its peeking
+  // neighbors. Recomputed from the responsive FACE_WIDTH on every resize.
+  const RADIUS = Math.round((FACE_WIDTH / 2 / Math.tan(Math.PI / N)) * 1.2);
+
+  // The stage angle accumulates freely (never reset) since each face is a
+  // permanent, individually-addressable element — turning is just moving to
+  // the next multiple of SEGMENT.
+  const angleRef = useRef(0);
+  const animatingRef = useRef(false);
+  const dragRef = useRef({ dragging: false, startX: 0, startAngle: 0, moved: false });
+
+  useGsapContext(sectionRef, () => {
+    gsap.from('.exp-heading', {
+      y: 24,
+      opacity: 0,
+      duration: 0.7,
+      ease: 'power2.out',
+      scrollTrigger: { trigger: sectionRef.current, start: 'top 75%', once: true },
+    });
+  }, []);
+
+  // Guarded by animatingRef so rapid clicks/drags can't start a second tween
+  // on top of one still in flight — that was the source of the "yazılar
+  // ortaya tekte geliyor" glitch (two competing rotateY tweens fighting over
+  // the same element, leaving the stage stuck at an unsettled in-between
+  // angle where several faces are partially, messily visible at once).
+  const settleTo = (targetAngle, duration) => {
+    if (animatingRef.current) return;
+    animatingRef.current = true;
+    gsap.to(stageRef.current, {
+      rotateY: targetAngle,
+      duration,
+      ease: 'power2.inOut',
+      onComplete() {
+        angleRef.current = targetAngle;
+        setFrontIndex(wrap(Math.round(-targetAngle / SEGMENT)));
+        animatingRef.current = false;
+      },
+    });
   };
-  
-  const prevExperience = () => {
-    setCurrentExperience((prev) => (prev - 1 + experiences.length) % experiences.length);
+
+  const turn = (direction) => {
+    if (animatingRef.current) return;
+    settleTo(angleRef.current - direction * SEGMENT, reducedMotion ? 0.001 : 0.5);
+  };
+
+  const onPointerDown = (e) => {
+    if (animatingRef.current) return;
+    dragRef.current = { dragging: true, startX: e.clientX, startAngle: angleRef.current, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e) => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    const dx = e.clientX - d.startX;
+    if (Math.abs(dx) > 3) d.moved = true;
+    gsap.set(stageRef.current, { rotateY: d.startAngle + dx * 0.4 });
+  };
+
+  const onPointerUp = () => {
+    const d = dragRef.current;
+    if (!d.dragging) return;
+    d.dragging = false;
+    if (!d.moved) return;
+
+    const current = gsap.getProperty(stageRef.current, 'rotateY');
+    const nearest = Math.round(current / SEGMENT) * SEGMENT;
+    settleTo(nearest, reducedMotion ? 0.001 : 0.35);
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 md:mb-6">
-        {language === 'tr' ? 'Deneyimler' : 'Experience'}
-      </h2>
-     
-      <div className="relative">
-        <div className="overflow-hidden">
-          <div 
-            className="flex transition-transform duration-700 ease-in-out"
-            style={{
-              transform: `translateX(-${currentExperience * 100}%)`,
-            }}
+    <section
+      id="experience"
+      ref={sectionRef}
+      className="section-light flex min-h-screen flex-col justify-center overflow-x-hidden px-6 py-20 md:px-10"
+    >
+      <div className="exp-heading mx-auto w-full max-w-5xl text-center md:text-left">
+        <p className="text-sm font-medium text-muted">{eyebrow[language]}</p>
+        <h2 className="mt-3 font-sans text-4xl font-bold leading-[1.1] tracking-[-0.02em] text-ink md:text-5xl">
+          {heading[language]}
+        </h2>
+      </div>
+
+      <div className="mx-auto mt-14 w-full max-w-5xl select-none">
+        <div
+          className="relative mx-auto touch-pan-y"
+          style={{ width: FACE_WIDTH, height: FACE_HEIGHT, perspective: '1400px' }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+        >
+          <div
+            ref={stageRef}
+            className="absolute inset-0 cursor-grab active:cursor-grabbing"
+            style={{ transformStyle: 'preserve-3d' }}
           >
-            {experiences.map((exp, index) => (
+            {experiences.map((exp, i) => (
               <div
-                key={index}
-                className="w-full flex-shrink-0 px-2 md:px-4"
+                key={`${exp.company.en}-${i}`}
+                className="absolute inset-0 flex flex-col justify-center overflow-hidden rounded-[28px] border border-black/[0.06] bg-white/90 bg-[radial-gradient(120%_120%_at_10%_0%,rgba(0,113,227,0.10),transparent_55%),radial-gradient(120%_120%_at_100%_100%,rgba(41,151,255,0.08),transparent_55%)] p-7 shadow-[0_20px_50px_-25px_rgba(0,0,0,0.25)] backdrop-blur-2xl"
+                style={{
+                  transform: `rotateY(${i * SEGMENT}deg) translateZ(${RADIUS}px)`,
+                  backfaceVisibility: 'hidden',
+                }}
               >
-                <div className="bg-gradient-to-br from-yellow-400/10 to-gray-700/20 backdrop-blur rounded-xl md:rounded-2xl p-4 md:p-6 border border-yellow-400/30 shadow-xl h-64 md:h-80 flex flex-col justify-center">
-                  <div className="text-center space-y-3 md:space-y-4">
-                    <h3 className="text-lg md:text-xl font-bold text-white">
-                      {exp.title[language]}
-                    </h3>
-                    <p className="text-yellow-400 font-medium text-sm md:text-base">
-                      {exp.company[language]}
-                    </p>
-                    <p className="text-gray-400 text-xs md:text-sm">
-                      {exp.period[language]}
-                    </p>
-                    <p className="text-gray-300 text-xs md:text-sm leading-relaxed line-clamp-6">
-                      {exp.description[language]}
-                    </p>
-                  </div>
-                </div>
+                <Face exp={exp} language={language} />
               </div>
             ))}
           </div>
         </div>
-        <button
-          onClick={prevExperience}
-          className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-gray-700/80 backdrop-blur rounded-full hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 z-10"
-        >
-          <ChevronLeft className="w-4 h-4 md:w-6 md:h-6 text-white" />
-        </button>
-        
-        <button
-          onClick={nextExperience}
-          className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-gray-700/80 backdrop-blur rounded-full hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 z-10"
-        >
-          <ChevronRight className="w-4 h-4 md:w-6 md:h-6 text-white" />
-        </button>
       </div>
 
-      <div className="flex justify-center space-x-2 pt-4">
-        {experiences.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setCurrentExperience(index)}
-            className={`w-2 h-2 md:w-3 md:h-3 rounded-full transition-all duration-300 ${
-              currentExperience === index 
-                ? 'bg-yellow-400 scale-125' 
-                : 'bg-gray-600 hover:bg-gray-500'
-            }`}
-          />
-        ))}
+      <div className="mx-auto mt-20 flex w-full max-w-5xl items-center justify-center gap-8">
+        <button
+          type="button"
+          onClick={() => turn(-1)}
+          className="rounded-full border border-black/10 bg-white p-3 text-ink/60 shadow-md transition hover:border-black/20 hover:text-ink"
+          aria-label="Previous"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+
+        <div className="flex items-center gap-2">
+          {experiences.map((_, i) => (
+            <span
+              key={i}
+              className={`h-2 w-2 rounded-full transition-colors ${i === frontIndex ? 'bg-accent' : 'bg-black/15'}`}
+            />
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => turn(1)}
+          className="rounded-full border border-black/10 bg-white p-3 text-ink/60 shadow-md transition hover:border-black/20 hover:text-ink"
+          aria-label="Next"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
       </div>
-     
-      <style jsx>{`
-        .line-clamp-6 {
-          display: -webkit-box;
-          -webkit-line-clamp: 6;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-      `}</style>
-    </div>
+    </section>
   );
 };
 
-export default ExperienceSection;
+export default ExperiencePage;

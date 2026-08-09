@@ -1,132 +1,110 @@
-import React, { useEffect, useMemo } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import portfolioProjects from "../data/projectData";
-import { useLanguage } from "../contexts/LanguageContext";
+import { useRef } from 'react';
+import gsap from 'gsap';
+import portfolioProjects from '../data/projectData';
+import { useLanguage } from '../contexts/LanguageContext';
+import useGsapContext from '../hooks/useGsapContext';
+import useReducedMotion from '../hooks/useReducedMotion';
+import useMediaQuery from '../hooks/useMediaQuery';
+import RoadJourney from '../components/RoadJourney';
 
-const PortfolioPage = ({
-  portfolioPage,
-  setPortfolioPage,
-  setSelectedProject,
-}) => {
+const eyebrow = { tr: 'Projeler', en: 'Projects' };
+const heading = { tr: 'Seçili Çalışmalar', en: 'Selected Work' };
+
+const PortfolioPage = ({ setSelectedProject }) => {
   const { language } = useLanguage();
-  const projectsPerPage = 3;
-  const totalPages = Math.ceil(portfolioProjects.length / projectsPerPage);
+  const sectionRef = useRef(null);
+  const reducedMotion = useReducedMotion();
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const showRoad = isDesktop && !reducedMotion;
 
-  // portfolioPage'in geçerli aralıkta olduğundan emin ol
-  useEffect(() => {
-    if (portfolioPage >= totalPages) {
-      setPortfolioPage(0);
-    }
-    if (portfolioPage < 0) {
-      setPortfolioPage(0);
-    }
-  }, [portfolioPage, totalPages, setPortfolioPage]);
+  useGsapContext(sectionRef, () => {
+    if (showRoad) return;
 
-  // useMemo ile currentProjects'i hesapla
-  const currentProjects = useMemo(() => {
-    const startIndex = portfolioPage * projectsPerPage;
-    const endIndex = startIndex + projectsPerPage;
-    return portfolioProjects.slice(startIndex, endIndex);
-  }, [portfolioPage, projectsPerPage]);
+    gsap.utils.toArray('.bento-card').forEach((card, i) => {
+      gsap.from(card, {
+        y: 24,
+        opacity: 0,
+        duration: 0.6,
+        ease: 'power2.out',
+        delay: (i % 4) * 0.05,
+        scrollTrigger: { trigger: card, start: 'top 85%', once: true },
+      });
+    });
 
-  const goToNextPage = () => {
-    if (portfolioPage < totalPages - 1) {
-      setPortfolioPage((prev) => prev + 1);
-    }
-  };
+    const pointerFine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!pointerFine) return;
 
-  const goToPrevPage = () => {
-    if (portfolioPage > 0) {
-      setPortfolioPage((prev) => prev - 1);
-    }
+    gsap.utils.toArray('.bento-card').forEach((card) => {
+      const rotY = gsap.quickTo(card, 'rotationY', { duration: 0.4, ease: 'power3' });
+      const rotX = gsap.quickTo(card, 'rotationX', { duration: 0.4, ease: 'power3' });
+      card.addEventListener('mousemove', (e) => {
+        const r = card.getBoundingClientRect();
+        rotY((((e.clientX - r.left) / r.width) - 0.5) * 6);
+        rotX((((e.clientY - r.top) / r.height) - 0.5) * -6);
+      });
+      card.addEventListener('mouseleave', () => {
+        rotY(0);
+        rotX(0);
+      });
+    });
+  }, [showRoad]);
+
+  const onGridMouseMove = (e) => {
+    const card = e.target.closest('.spot-card');
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    card.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    card.style.setProperty('--my', `${e.clientY - r.top}px`);
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 md:mb-6">
-        {language === "tr" ? "Portfolio" : "Portfolio"}
-      </h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-        {currentProjects.map((project) => (
-          <div
-            key={project.id}
-            onClick={() => setSelectedProject(project)}
-            className="bg-gray-800/30 rounded-xl md:rounded-2xl overflow-hidden border border-yellow-400/20 hover:bg-gray-700/30 transition-all cursor-pointer group"
-          >
-            <img
-              src={project.image}
-              alt={project.title[language]}
-              className="w-full h-40 md:h-48 object-cover group-hover:scale-105 transition-transform"
-              loading="lazy"
-            />
-            <div className="p-3 md:p-4">
-              <h3 className="text-base md:text-lg font-bold text-white mb-2">
-                {project.title[language]}
-              </h3>
-              <p className="text-yellow-400 text-xs md:text-sm mb-2 md:mb-3">
-                {project.category[language]}
-              </p>
-              <p className="text-yellow-400 text-xs md:text-sm mb-2 md:mb-3">
-                <a
-                  href={project.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-yellow-300 transition-colors"
-                >
-                  {project.link}
-                </a>
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex flex-col items-center space-y-4 mt-6 md:mt-8">
-          {/* Page Info */}
-          <div className="text-gray-400 text-sm">
-            {language === "tr"
-              ? `Sayfa ${portfolioPage + 1} / ${totalPages}`
-              : `Page ${portfolioPage + 1} of ${totalPages}`}
-          </div>
-
-          {/* Pagination Controls */}
-          <div className="flex items-center space-x-4">
-            {/* Previous Button */}
-            <button
-              onClick={goToPrevPage}
-              disabled={portfolioPage === 0}
-              className={`p-2 rounded-lg transition-all ${
-                portfolioPage === 0
-                  ? "bg-gray-700/30 text-gray-500 cursor-not-allowed"
-                  : "bg-gray-700/50 text-white hover:bg-yellow-500 hover:text-gray-900"
-              }`}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            {/* Current Page */}
-            <div className="bg-yellow-400 text-gray-900 w-10 h-10 rounded-lg flex items-center justify-center font-bold">
-              {portfolioPage + 1}
-            </div>
-
-            {/* Next Button */}
-            <button
-              onClick={goToNextPage}
-              disabled={portfolioPage === totalPages - 1}
-              className={`p-2 rounded-lg transition-all ${
-                portfolioPage === totalPages - 1
-                  ? "bg-gray-700/30 text-gray-500 cursor-not-allowed"
-                  : "bg-gray-700/50 text-white hover:bg-yellow-500 hover:text-gray-900"
-              }`}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+    <section id="projects" ref={sectionRef} className="section-light">
+      <div className={showRoad ? '' : 'px-6 py-28 md:px-10 md:py-36'}>
+        <div className={showRoad ? 'mx-auto max-w-6xl px-6 pt-28 md:px-10 md:pt-36' : 'mx-auto max-w-6xl'}>
+          <p className="text-sm font-medium text-muted">{eyebrow[language]}</p>
+          <h2 className="mt-3 font-sans text-4xl font-bold leading-[1.1] tracking-[-0.02em] text-ink md:text-5xl">
+            {heading[language]}
+          </h2>
         </div>
-      )}
-    </div>
+
+        {showRoad ? (
+          <RoadJourney projects={portfolioProjects} language={language} onSelect={setSelectedProject} />
+        ) : (
+          <div className="mx-auto max-w-6xl">
+            <div
+              onMouseMove={onGridMouseMove}
+              className="mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 md:gap-6"
+              style={{ perspective: '1000px' }}
+            >
+              {portfolioProjects.map((project) => (
+                <button
+                  type="button"
+                  key={project.id}
+                  onClick={() => setSelectedProject(project)}
+                  className="bento-card spot-card group relative aspect-square overflow-hidden rounded-[28px] border border-black/[0.06] bg-white text-left shadow-[0_20px_50px_-25px_rgba(0,0,0,0.25)] transition-all hover:border-black/20 hover:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)]"
+                  style={{ transformStyle: 'preserve-3d' }}
+                >
+                  <img
+                    src={project.image}
+                    alt={project.title[language]}
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 border-t border-white/40 bg-white/70 p-5 backdrop-blur-xl">
+                    <p className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-accent">
+                      {project.category[language]}
+                    </p>
+                    <h3 className="mt-1 font-sans text-base font-semibold text-ink md:text-lg">
+                      {project.title[language]}
+                    </h3>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 };
 

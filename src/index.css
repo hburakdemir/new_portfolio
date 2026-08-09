@@ -1,3 +1,131 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  color-scheme: light;
+
+  --black: #000000;
+  --ink: #1d1d1f;
+  --paper: #f5f5f7;
+  --gray: #86868b;
+  --accent: #0071e3;
+  --accent-dark: #2997ff;
+
+  /* Space-separated RGB channels for the same tokens above — Tailwind's
+     opacity modifiers (e.g. text-ink/70) can only slot an alpha value into
+     a color it can decompose into channels, which a plain var(--x) string
+     isn't. These triplets are what tailwind.config.js's color functions
+     read to make /NN modifiers work on these custom tokens. */
+  --black-rgb: 0 0 0;
+  --ink-rgb: 29 29 31;
+  --paper-rgb: 245 245 247;
+  --gray-rgb: 134 134 139;
+  --accent-rgb: 0 113 227;
+  --accent-dark-rgb: 41 151 255;
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  overflow-x: hidden;
+}
+
+body {
+  font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Every section uses the same white/paper look — one theme, site-wide. */
+.section-light {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Lenis smooth-scroll boilerplate */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* Skills marquee track — auto-scroll is JS-driven (rAF, see SkillsPage.jsx)
+   so the same element can also be drag-scrolled; this just hides the
+   scrollbar cross-browser. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Cursor spotlight for bento project cards */
+.spot-card {
+  position: relative;
+}
+
+.spot-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgba(0, 113, 227, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.spot-card:hover::before {
+  opacity: 1;
+}
+
+.bento-card {
+  position: relative;
+}
+
+/* Custom cursor (CursorTrail.jsx): hide the native cursor everywhere,
+   including over elements with their own cursor-* utility (buttons, the
+   cube's grab handle, etc.) — the override has to win against those, hence
+   !important, only ever toggled on for fine-pointer + motion-allowed users. */
+html.custom-cursor-active,
+html.custom-cursor-active * {
+  cursor: none !important;
+}
+
+.cursor-dust {
+  position: fixed;
+  border-radius: 9999px;
+  background: #61dafb;
+  box-shadow:
+    0 0 6px 1px rgba(97, 218, 251, 0.9),
+    0 0 14px 4px rgba(97, 218, 251, 0.5);
+  transform: translate(-50%, -50%);
+  animation: cursor-dust-fade 750ms ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes cursor-dust-fade {
+  from {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx, 0px)), -220%) scale(0.3);
+  }
+}

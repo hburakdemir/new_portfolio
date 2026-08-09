@@ -1,64 +1,98 @@
-import React from "react";
-import { X } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { X, ZoomIn } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
 
 const ProjectModal = ({ selectedProject, setSelectedProject }) => {
   const { language } = useLanguage();
+  const [isImageZoomed, setIsImageZoomed] = useState(false);
+
+  useEffect(() => {
+    setIsImageZoomed(false);
+  }, [selectedProject]);
 
   if (!selectedProject) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white/5 backdrop-blur-lg rounded-3xl p-8 max-w-2xl w-full border border-yellow-400/20 shadow-2xl">
-        <div className="flex justify-between items-start mb-6">
-          <h2 className="text-2xl font-bold text-white">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-[32px] border border-black/10 bg-white/95 p-8 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+        <div className="mb-6 flex items-start justify-between">
+          <h2 className="font-sans text-2xl font-bold text-ink">
             {selectedProject.title[language]}
           </h2>
           <button
             onClick={() => setSelectedProject(null)}
-            className="p-2 bg-gray-700/50 rounded-full hover:bg-yellow-500 hover:text-gray-900 transition-colors"
+            className="rounded-full border border-black/10 p-2 transition-colors hover:border-black/25"
           >
-            <X className="w-6 h-6 text-white" />
+            <X className="h-6 w-6 text-ink" />
           </button>
         </div>
 
-        <img
-          src={selectedProject.image}
-          alt={selectedProject.title[language]}
-          className="w-full h-64 object-cover rounded-2xl mb-6"
-        />
+        <button
+          type="button"
+          onClick={() => setIsImageZoomed(true)}
+          className="group relative mb-6 block w-full cursor-zoom-in"
+          aria-label={language === "tr" ? "Görseli büyüt" : "Enlarge image"}
+        >
+          <img
+            src={selectedProject.image}
+            alt={selectedProject.title[language]}
+            className="h-64 w-full rounded-2xl object-cover"
+          />
+          <span className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
+            <ZoomIn className="h-8 w-8 text-white drop-shadow" />
+          </span>
+        </button>
+
+        {isImageZoomed && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setIsImageZoomed(false)}
+          >
+            <button
+              onClick={() => setIsImageZoomed(false)}
+              className="absolute right-4 top-4 rounded-full border border-white/20 bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+              aria-label={language === "tr" ? "Kapat" : "Close"}
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={selectedProject.image}
+              alt={selectedProject.title[language]}
+              className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
 
         <div className="space-y-4">
-          <p className="text-yellow-400 font-medium">
+          <p className="text-xs font-medium uppercase tracking-[0.1em] text-accent">
             {selectedProject.category[language]}
           </p>
-          <p className="text-gray-300 leading-relaxed">
+          <p className="whitespace-pre-line leading-relaxed text-ink/70">
             {selectedProject.description[language]}
           </p>
-        {selectedProject.link && (
-  <p className="text-yellow-400 text-xs md:text-sm mb-2 md:mb-3">
-    <a
-      href={`https://${selectedProject.link.replace(/^https?:\/\//, '')}`} // https ekliyoruz
-      target="_blank"
-      rel="noopener noreferrer"
-      className="underline hover:text-yellow-300 transition-colors"
-    >
-      {selectedProject.link.replace(/^https?:\/\//, '')} {/* sadece site adı göster */}
-    </a>
-  </p>
-)}
+          {selectedProject.link && (
+            <p className="text-sm">
+              <a
+                href={`https://${selectedProject.link.replace(/^https?:\/\//, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent underline transition-colors hover:text-accent-dark"
+              >
+                {selectedProject.link.replace(/^https?:\/\//, '')}
+              </a>
+            </p>
+          )}
 
           <div className="space-y-2">
-            <h3 className="text-white font-medium">
-              {language === "tr"
-                ? "Kullanılan Teknolojiler:"
-                : "Technologies Used:"}
+            <h3 className="text-xs font-medium uppercase tracking-[0.1em] text-muted">
+              {language === "tr" ? "Kullanılan Teknolojiler:" : "Technologies Used:"}
             </h3>
             <div className="flex flex-wrap gap-2">
               {selectedProject.tech.map((tech, index) => (
                 <span
                   key={index}
-                  className="px-3 py-1 bg-yellow-500/20 text-yellow-300 text-sm rounded-full"
+                  className="rounded-full bg-accent/10 px-3 py-1 text-sm text-accent"
                 >
                   {tech}
                 </span>

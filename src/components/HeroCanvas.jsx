@@ -1,17 +1,12 @@
 import { useEffect, useRef } from 'react';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initHeroParticles } from '../three/heroParticles';
 import useReducedMotion from '../hooks/useReducedMotion';
 
-gsap.registerPlugin(ScrollTrigger);
-
-// Mounts/tears down the vanilla-Three.js particle field and drives its
-// scroll-out "explode" progress from a ScrollTrigger spanning the whole
-// hero section (0 at top, 1 once the hero has fully scrolled out of view).
-// All state is created inside this one effect and fully torn down in its
-// cleanup, so React 19 StrictMode's dev mount->unmount->mount just runs two
-// independent, fully-cleaned instances.
+// Mounts/tears down the vanilla-Three.js particle field, which assembles
+// itself into the HBD monogram on load and stays formed (no scroll
+// linkage). All state is created inside this one effect and fully torn
+// down in its cleanup, so React 19 StrictMode's dev mount->unmount->mount
+// just runs two independent, fully-cleaned instances.
 export default function HeroCanvas({ className = '', xOffset = 0 }) {
   const containerRef = useRef(null);
   const reducedMotion = useReducedMotion();
@@ -21,26 +16,15 @@ export default function HeroCanvas({ className = '', xOffset = 0 }) {
 
     let cancelled = false;
     let api = null;
-    let trigger = null;
     const container = containerRef.current;
 
     initHeroParticles(container, { theme: 'light', xOffset }).then((result) => {
       if (cancelled || !result) return;
       api = result;
-      trigger = ScrollTrigger.create({
-        trigger: '#hero',
-        start: 'top top',
-        end: 'bottom top',
-        scrub: true,
-        onUpdate(self) {
-          api.setExplode(self.progress);
-        },
-      });
     });
 
     return () => {
       cancelled = true;
-      trigger?.kill();
       api?.dispose();
     };
   }, [reducedMotion, xOffset]);

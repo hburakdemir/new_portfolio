@@ -75,6 +75,27 @@ const ExperiencePage = () => {
   const angleRef = useRef(0);
   const animatingRef = useRef(false);
   const dragRef = useRef({ dragging: false, startX: 0, startAngle: 0, moved: false });
+  const faceRefs = useRef([]);
+
+  // Per-face brightness by its *effective* angle to the camera (own offset +
+  // however far the stage has turned) — without this every face looked
+  // equally bright regardless of rotation, reading as flat fanned-out cards
+  // instead of a lit, rotating solid. Runs on every drag/settle tick, not
+  // just on stop, so the shading turns smoothly with the cube.
+  const updateShading = () => {
+    const current = gsap.getProperty(stageRef.current, 'rotateY') || 0;
+    faceRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const angleRad = ((i * SEGMENT + current) * Math.PI) / 180;
+      const facing = Math.cos(angleRad); // 1 = facing camera, -1 = facing away
+      const brightness = 0.6 + 0.4 * Math.max(0, facing);
+      el.style.filter = `brightness(${brightness})`;
+    });
+  };
+
+  useEffect(() => {
+    updateShading();
+  }, []);
 
   useGsapContext(sectionRef, () => {
     gsap.from('.exp-heading', {
@@ -98,6 +119,7 @@ const ExperiencePage = () => {
       rotateY: targetAngle,
       duration,
       ease: 'power2.inOut',
+      onUpdate: updateShading,
       onComplete() {
         angleRef.current = targetAngle;
         setFrontIndex(wrap(Math.round(-targetAngle / SEGMENT)));
@@ -123,6 +145,7 @@ const ExperiencePage = () => {
     const dx = e.clientX - d.startX;
     if (Math.abs(dx) > 3) d.moved = true;
     gsap.set(stageRef.current, { rotateY: d.startAngle + dx * 0.4 });
+    updateShading();
   };
 
   const onPointerUp = () => {
@@ -149,7 +172,7 @@ const ExperiencePage = () => {
         </h2>
       </div>
 
-      <div className="mx-auto mt-14 w-full max-w-5xl select-none">
+      <div className="mx-auto mt-14 w-full max-w-5xl select-none px-4 sm:px-10 md:px-16">
         <div
           className="relative mx-auto touch-pan-y"
           style={{ width: FACE_WIDTH, height: FACE_HEIGHT, perspective: '1400px' }}
@@ -166,6 +189,9 @@ const ExperiencePage = () => {
             {experiences.map((exp, i) => (
               <div
                 key={`${exp.company.en}-${i}`}
+                ref={(el) => {
+                  faceRefs.current[i] = el;
+                }}
                 className="absolute inset-0 flex flex-col justify-center overflow-hidden rounded-[28px] border border-black/[0.06] bg-white/90 bg-[radial-gradient(120%_120%_at_10%_0%,rgba(0,113,227,0.10),transparent_55%),radial-gradient(120%_120%_at_100%_100%,rgba(41,151,255,0.08),transparent_55%)] p-7 shadow-[0_20px_50px_-25px_rgba(0,0,0,0.25)] backdrop-blur-2xl"
                 style={{
                   transform: `rotateY(${i * SEGMENT}deg) translateZ(${RADIUS}px)`,

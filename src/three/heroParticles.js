@@ -1,6 +1,6 @@
 // Hero "signal constellation" — particles assemble into the HBD monogram on
-// load, stay in constant restless motion (never a static, settled shape),
-// then burst outward radially as the user scrolls the hero out of view.
+// load and stay in constant restless motion (never a perfectly static
+// shape) from then on. No scroll linkage: forms once, stays formed.
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { tokens } from '../lib/tokens.js';
@@ -179,12 +179,6 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
   const dispY = new Float32Array(COUNT);
   const normX = new Float32Array(COUNT);
   const normY = new Float32Array(COUNT);
-  // Per-particle outward burst direction — mostly radial from the mark's
-  // center (so the shape reads as "flying apart"), with enough random
-  // spread that the burst doesn't look like a perfectly uniform ring.
-  const explodeX = new Float32Array(COUNT);
-  const explodeY = new Float32Array(COUNT);
-  const explodeZ = new Float32Array(COUNT);
 
   for (let i = 0; i < COUNT; i++) {
     const ci = (i % pixelCount) * 2;
@@ -192,11 +186,10 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     const [wx, wy] = toWorld(candidates[ci] + jitter(), candidates[ci + 1] + jitter());
     const wz = (Math.random() * 2 - 1) * 0.18;
 
-    // xOffset shifts the *resting* mark sideways (e.g. off-center in a
-    // full-bleed hero canvas) without skewing the explode direction below —
-    // normX/normY/explode* are derived from the un-shifted wx,wy, so the
-    // burst still radiates symmetrically from the mark's own center instead
-    // of being biased toward whichever side xOffset leans it.
+    // xOffset shifts the *settled* mark sideways (e.g. off-center in a
+    // full-bleed hero canvas) — normX/normY below are derived from the
+    // un-shifted wx,wy, so the idle breathing motion stays centered on the
+    // mark's own shape regardless of where xOffset places it on screen.
     targets[i * 3] = wx + xOffset;
     targets[i * 3 + 1] = wy;
     targets[i * 3 + 2] = wz;
@@ -213,14 +206,6 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     const mag = Math.hypot(wx, wy) || 1;
     normX[i] = wx / mag;
     normY[i] = wy / mag;
-
-    const ex = normX[i] + (Math.random() - 0.5) * 0.6;
-    const ey = normY[i] + (Math.random() - 0.5) * 0.6;
-    const ez = (Math.random() - 0.5) * 1.6;
-    const emag = Math.hypot(ex, ey, ez) || 1;
-    explodeX[i] = ex / emag;
-    explodeY[i] = ey / emag;
-    explodeZ[i] = ez / emag;
 
     const col = pickColor(palette);
     colors[i * 3] = col.r;
@@ -252,7 +237,6 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
   scene.add(points);
 
   const state = { assemble: 0 };
-  let explodeProgress = 0; // 0 = formed mark, 1 = fully burst apart (scroll-driven)
   let cursor = null;
   let visible = true;
   let pageVisible = !document.hidden;
@@ -283,36 +267,28 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
 
   const posAttr = geo.getAttribute('position');
   let elapsed = 0;
-  let explodeVel = 0; // smoothed, so the burst has a touch of inertia rather than snapping to scroll
 
   const render = (_time, deltaMS) => {
     if (disposed || !visible || !pageVisible) return;
     const dt = deltaMS / 1000;
     elapsed += dt;
-    const p = state.assemble;
     const t = elapsed;
 
-    // Restless idle motion: two overlapping sine waves per particle so the
-    // formed mark never sits perfectly still, even at rest.
-    explodeVel += (explodeProgress - explodeVel) * Math.min(1, dt * 4);
-    const burst = explodeVel * explodeVel; // accelerating outward
-    const burstDist = burst * 10;
+    const p = state.assemble;
 
     for (let i = 0; i < COUNT; i++) {
       const i3 = i * 3;
+      // Restless idle motion: two overlapping sine waves per particle so the
+      // mark (formed or not) never sits perfectly still.
       const breathe =
         0.055 * Math.sin(t * 0.9 + phases[i] * 6.283) + 0.03 * Math.sin(t * 2.3 + phases2[i] * 6.283);
-      const baseX = scatters[i3] + (targets[i3] - scatters[i3]) * p + normX[i] * breathe;
-      const baseY = scatters[i3 + 1] + (targets[i3 + 1] - scatters[i3 + 1]) * p + normY[i] * breathe;
-      const baseZ = scatters[i3 + 2] + (targets[i3 + 2] - scatters[i3 + 2]) * p + breathe * 0.6;
-
-      const x = baseX + explodeX[i] * burstDist;
-      const y = baseY + explodeY[i] * burstDist;
-      const z = baseZ + explodeZ[i] * burstDist;
+      const x = scatters[i3] + (targets[i3] - scatters[i3]) * p + normX[i] * breathe;
+      const y = scatters[i3 + 1] + (targets[i3 + 1] - scatters[i3 + 1]) * p + normY[i] * breathe;
+      const z = scatters[i3 + 2] + (targets[i3 + 2] - scatters[i3 + 2]) * p + breathe * 0.6;
 
       let px = 0;
       let py = 0;
-      if (cursor && burst < 0.05) {
+      if (cursor) {
         const dx = x - cursor.x;
         const dy = y - cursor.y;
         const dist = Math.hypot(dx, dy);
@@ -330,8 +306,7 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
       positions[i3 + 2] = z;
     }
     posAttr.needsUpdate = true;
-    points.rotation.y = Math.sin(t * (Math.PI / 14)) * 0.05 + burst * 0.6;
-    mat.opacity = baseOpacity * (1 - Math.min(1, burst * 1.1));
+    points.rotation.y = Math.sin(t * (Math.PI / 14)) * 0.05;
     renderer.render(scene, camera);
   };
   gsap.ticker.add(render);
@@ -370,13 +345,5 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     renderer.domElement.remove();
   };
 
-  return {
-    dispose,
-    // Driven by hero scroll-out progress (0 at top, ->1 as the hero scrolls
-    // out of view): particles burst radially outward and fade, per "kaydırdıkça
-    // patlasınlar."
-    setExplode(p) {
-      explodeProgress = p;
-    },
-  };
+  return { dispose };
 }

@@ -142,7 +142,7 @@ export default function RoadJourney({ projects, language, onSelect }) {
   const active = projects[activeIndex];
 
   return (
-    <div ref={outerRef} style={{ height: `${N * 90}vh` }} className="relative">
+    <div ref={outerRef} style={{ height: `${N * 45}vh` }} className="relative">
       <div ref={pinRef} className="sticky top-0 h-screen w-full overflow-hidden bg-paper">
         <div
           ref={trackRef}

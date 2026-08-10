@@ -209,7 +209,9 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
                 src={project.image}
                 alt={project.title[language]}
                 loading="lazy"
-                className="absolute inset-0 h-full w-full object-cover"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
+                className="absolute inset-0 h-full w-full select-none object-cover [-webkit-touch-callout:none] [-webkit-user-drag:none]"
               />
               <div className="absolute inset-x-0 bottom-0 border-t border-white/40 bg-white/95 p-4">
                 <p className="text-[0.6rem] font-medium uppercase tracking-[0.1em] text-accent">

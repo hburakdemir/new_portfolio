@@ -179,6 +179,16 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
   const frustumWidth = frustumHeight * aspect;
   const targetWorldWidth = frustumWidth * (isMobile ? 0.8 : 0.5);
   const SCALE = targetWorldWidth / (textWidthPx || width);
+
+  // Scattered particles need to stay roughly within the same lane the
+  // settled mark lives in (the empty right column on desktop, xOffset != 0)
+  // instead of ballooning into the text column on the left — a fixed
+  // radius of 5 world units, sized for the old non-offset centered hero,
+  // was wide enough on the wider desktop frustum to spill well past x=0
+  // and read as noise scattered across the headline/CTAs ("webde iğrenç
+  // gözüküyor"). Deriving it from the live frustum width keeps the cloud's
+  // footprint proportional to how much room it actually has.
+  const scatterRadius = Math.min(5, frustumWidth * 0.32);
   const toWorld = (px, py) => [(px - width / 2) * SCALE, -(py - height / 2) * SCALE];
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
@@ -218,8 +228,8 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     targets[i * 3 + 2] = wz;
 
     const dir = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
-    const rad = 5 * Math.cbrt(Math.random());
-    scatters[i * 3] = dir.x * rad;
+    const rad = scatterRadius * Math.cbrt(Math.random());
+    scatters[i * 3] = dir.x * rad + xOffset;
     scatters[i * 3 + 1] = dir.y * rad;
     scatters[i * 3 + 2] = dir.z * rad * 0.6;
 

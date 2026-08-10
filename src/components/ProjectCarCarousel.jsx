@@ -76,7 +76,7 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
 
   const angleRef = useRef(0);
   const animatingRef = useRef(false);
-  const dragRef = useRef({ dragging: false, startX: 0, startAngle: 0, moved: false });
+  const dragRef = useRef({ tracking: false, confirmed: false, startX: 0, startY: 0, startAngle: 0, pointerId: null });
 
   const progressToX = (p) => (p / (N - 1) - 0.5) * POINT_SPAN;
   const angleToProgress = (angle) => clamp(-angle / SEGMENT, 0, N - 1);
@@ -116,15 +116,37 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
 
   const onPointerDown = (e) => {
     if (animatingRef.current) return;
-    dragRef.current = { dragging: true, startX: e.clientX, startAngle: angleRef.current, moved: false };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Don't claim the gesture yet — on touch, a vertical page-scroll swipe
+    // very often starts on top of this card (it's a large target), and
+    // grabbing pointer capture immediately fought the browser's native
+    // vertical scroll instead of letting it through (same root cause the
+    // skills marquee had). Wait for confirmed horizontal intent first.
+    dragRef.current = {
+      tracking: true,
+      confirmed: false,
+      startX: e.clientX,
+      startY: e.clientY,
+      startAngle: angleRef.current,
+      pointerId: e.pointerId,
+    };
   };
 
   const onPointerMove = (e) => {
     const d = dragRef.current;
-    if (!d.dragging) return;
+    if (!d.tracking) return;
     const dx = e.clientX - d.startX;
-    if (Math.abs(dx) > 3) d.moved = true;
+
+    if (!d.confirmed) {
+      const dy = e.clientY - d.startY;
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      if (Math.abs(dy) >= Math.abs(dx)) {
+        d.tracking = false; // vertical intent — hand this gesture back to page scroll
+        return;
+      }
+      d.confirmed = true;
+      e.currentTarget.setPointerCapture(d.pointerId);
+    }
+
     const liveAngle = d.startAngle + dx * 0.4;
     gsap.set(stageRef.current, { rotateY: liveAngle });
     updateCar();
@@ -133,9 +155,9 @@ export default function ProjectCarCarousel({ projects, language, onSelect }) {
 
   const onPointerUp = () => {
     const d = dragRef.current;
-    if (!d.dragging) return;
-    d.dragging = false;
-    if (!d.moved) {
+    if (!d.tracking) return;
+    d.tracking = false;
+    if (!d.confirmed) {
       gsap.to(carRef.current, { rotate: 0, duration: reducedMotion ? 0.001 : 0.3, ease: 'power2.out' });
       return;
     }

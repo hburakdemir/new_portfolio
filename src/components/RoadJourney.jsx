@@ -87,10 +87,20 @@ export default function RoadJourney({ projects, language, onSelect }) {
       setActiveIndex((current) => (current === idx ? current : idx));
     };
 
+    // Pinned via GSAP's own pin (fixed-position + spacer), not CSS
+    // `position: sticky` — the site's `html,body { overflow-x: hidden }`
+    // (index.css) forces overflow-y to compute as 'auto' on both (a spec
+    // quirk: setting only one axis force-computes the other from 'visible'
+    // to 'auto'), which makes them count as scroll containers and breaks
+    // sticky for every descendant: pinRef just scrolled off normally
+    // instead of sticking, leaving a large empty gap below the scene for
+    // however far you'd scrolled into the section. GSAP's pin sidesteps
+    // that entirely (same mechanism already used for the hero's pin).
     const st = ScrollTrigger.create({
       trigger: outerRef.current,
       start: 'top top',
       end: 'bottom bottom',
+      pin: pinRef.current,
       scrub: true,
       onUpdate: (self) => update(self.progress),
       onRefreshInit: () => update(0),
@@ -143,7 +153,7 @@ export default function RoadJourney({ projects, language, onSelect }) {
 
   return (
     <div ref={outerRef} style={{ height: `${N * 45}vh` }} className="relative">
-      <div ref={pinRef} className="sticky top-0 h-screen w-full overflow-hidden bg-paper">
+      <div ref={pinRef} className="h-screen w-full overflow-hidden bg-paper">
         <div
           ref={trackRef}
           className="absolute left-0 top-1/2"

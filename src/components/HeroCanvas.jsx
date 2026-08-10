@@ -7,19 +7,19 @@ import useReducedMotion from '../hooks/useReducedMotion';
 gsap.registerPlugin(ScrollTrigger);
 
 // Mounts/tears down the vanilla-Three.js particle field and drives its
-// scroll-linked "settle" progress from a ScrollTrigger spanning a *fixed*
-// 280px of scroll from the hero's top (0 = scattered, 1 = settled into
-// HBD) — "mevcut bulunduğu konumda birleşsin": the mark sits at its usual
-// spot in the hero, which doesn't itself move as you scroll, so the trigger
-// range has to stay short enough that assembly finishes while that spot is
-// still comfortably on screen. A range tied to the section's own height
-// (e.g. half the hero) was long enough that by the time assembly finished,
-// the scroll needed to get there had *also* carried the mark's fixed
-// position most of the way off the top of the screen. All state is created
-// inside this one effect and fully torn down in its cleanup, so React 19 StrictMode's dev
-// mount->unmount->mount just runs two independent, fully-cleaned instances
-// (the cancelToken is what makes the *first*, discarded one actually stop
-// instead of leaking a whole second WebGL scene — see heroParticles.js).
+// scroll-linked "settle" progress from a ScrollTrigger that *pins* the hero
+// ("kaydırınca yazı tamamlanana kadar sayfa sabit kalsın") for a fixed
+// 1000px of scroll: 0 progress = scattered, 1 = settled into HBD, section un-pins
+// and normal scroll resumes right after. Pinning is what actually fixes
+// "kaydırınca ekranda hbd yazısını göremiyorsun" — scrubbing the same
+// progress against a *non-pinned* section meant the page (and the mark's
+// fixed position in it) scrolled away at the same time assembly was
+// finishing, so by the time it was fully formed it had also scrolled mostly
+// off screen. All state is created inside this one effect and fully torn
+// down in its cleanup, so React 19 StrictMode's dev mount->unmount->mount
+// just runs two independent, fully-cleaned instances (the cancelToken is
+// what makes the *first*, discarded one actually stop instead of leaking a
+// whole second WebGL scene — see heroParticles.js).
 export default function HeroCanvas({ className = '', xOffset = 0 }) {
   const containerRef = useRef(null);
   const reducedMotion = useReducedMotion();
@@ -38,7 +38,8 @@ export default function HeroCanvas({ className = '', xOffset = 0 }) {
       trigger = ScrollTrigger.create({
         trigger: '#hero',
         start: 'top top',
-        end: '+=280',
+        end: '+=1000',
+        pin: true,
         scrub: true,
         onUpdate(self) {
           api.setAssemble(self.progress);

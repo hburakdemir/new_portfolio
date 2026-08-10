@@ -310,12 +310,19 @@ export async function initHeroParticles(container, { theme = 'dark', xOffset = 0
     state.assemble += (targetAssemble - state.assemble) * Math.min(1, dt * 3);
     const p = state.assemble;
 
+    // Idle jitter calms down as the mark settles — at full assembly it's
+    // damped to a third of its scattered-state amplitude, so the letters
+    // read as "arrived" rather than perpetually vibrating in place
+    // ("tam oturmuyor harfler"). Still never *perfectly* static, just calmer.
+    const breatheDamp = 1 - p * 0.7;
+
     for (let i = 0; i < COUNT; i++) {
       const i3 = i * 3;
       // Restless idle motion: two overlapping sine waves per particle so the
       // mark (formed or not) never sits perfectly still.
       const breathe =
-        0.055 * Math.sin(t * 0.9 + phases[i] * 6.283) + 0.03 * Math.sin(t * 2.3 + phases2[i] * 6.283);
+        (0.055 * Math.sin(t * 0.9 + phases[i] * 6.283) + 0.03 * Math.sin(t * 2.3 + phases2[i] * 6.283)) *
+        breatheDamp;
       const x = scatters[i3] + (targets[i3] - scatters[i3]) * p + normX[i] * breathe;
       const y = scatters[i3 + 1] + (targets[i3 + 1] - scatters[i3 + 1]) * p + normY[i] * breathe;
       const z = scatters[i3 + 2] + (targets[i3 + 2] - scatters[i3 + 2]) * p + breathe * 0.6;

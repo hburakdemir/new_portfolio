@@ -39,7 +39,13 @@ const PortfolioPage = ({ setSelectedProject }) => {
 
       {showRoad ? (
         <div className="-mx-6 mt-14 md:-mx-10">
-          <RoadJourney projects={portfolioProjects} language={language} onSelect={setSelectedProject} />
+          <RoadJourney
+            projects={portfolioProjects}
+            language={language}
+            onSelect={setSelectedProject}
+            eyebrow={eyebrow[language]}
+            heading={heading[language]}
+          />
         </div>
       ) : (
         <div className="mx-auto mt-14 max-w-6xl">

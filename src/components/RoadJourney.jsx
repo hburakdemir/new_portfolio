@@ -40,7 +40,7 @@ function buildPaths(totalWidth) {
   return { road, ground };
 }
 
-export default function RoadJourney({ projects, language, onSelect }) {
+export default function RoadJourney({ projects, language, onSelect, eyebrow, heading }) {
   const N = projects.length;
   // Full road including the coast-down after the last peak — kept for
   // drawing only, so the final hill still reads as a real hill rather than
@@ -149,10 +149,17 @@ export default function RoadJourney({ projects, language, onSelect }) {
     // for it, since it's absolutely positioned) — so it's explicitly hidden
     // only there, and only there, restored the moment you scroll back up
     // into range.
-    const setSceneVisible = (visible, animate) => {
-      const vars = { autoAlpha: visible ? 1 : 0 };
-      if (animate) gsap.to(sceneRef.current, { ...vars, duration: 0.3, ease: 'power1.out', overwrite: true });
-      else gsap.set(sceneRef.current, vars);
+    //
+    // This toggle is a hard cut (gsap.set), not a fade — an animated fade
+    // here used to leave a ~0.3s window where sceneRef was still partially
+    // opaque while Education had already scrolled up underneath it, since
+    // sceneRef (positioned) always paints over Education (a plain in-flow
+    // section) regardless of its opacity. GSAP's own pin engage/release is
+    // already an instant, un-eased swap ("eğitim bilgisi projelerin üstüne
+    // geliyor" was that swap and this fade disagreeing) — cutting instantly
+    // here just matches it, so there's never a frame where both are visible.
+    const setSceneVisible = (visible) => {
+      gsap.set(sceneRef.current, { autoAlpha: visible ? 1 : 0 });
     };
 
     const st = ScrollTrigger.create({
@@ -170,15 +177,15 @@ export default function RoadJourney({ projects, language, onSelect }) {
       scrub: true,
       onUpdate: (self) => update(self.progress),
       onRefreshInit: () => update(0),
-      onEnterBack: () => setSceneVisible(true, true),
-      onLeave: () => setSceneVisible(false, true),
+      onEnterBack: () => setSceneVisible(true),
+      onLeave: () => setSceneVisible(false),
     });
     stRef.current = st;
     update(0);
     // Hidden only if the page is already scrolled past `end` on mount (e.g.
     // a restored scroll position) — otherwise visible by default so it's
     // there to scroll into naturally, pinned or not.
-    setSceneVisible(!(st.progress >= 1 && !st.isActive), false);
+    setSceneVisible(!(st.progress >= 1 && !st.isActive));
 
     return () => {
       ro.disconnect();
@@ -281,17 +288,30 @@ export default function RoadJourney({ projects, language, onSelect }) {
             </div>
           </div>
 
+          {/* Mirrors the page-level section heading so it stays on screen
+              the whole time the scene is pinned/locked — the real one lives
+              above this section in normal flow, which is already scrolled
+              out of view by the time the pin engages ("kitlenen ekranda üst
+              tarafta seçili çalışmalar yazısı kalmalı"). top-20 clears the
+              fixed site header (renders ~71px tall) — top-6/top-8, what the
+              View All button below used to sit at, put both of them right
+              behind it, under its higher z-index. */}
+          <div className="pointer-events-none absolute left-6 top-20 z-10 md:left-10">
+            <p className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-muted">{eyebrow}</p>
+            <h2 className="mt-1 font-sans text-xl font-bold tracking-[-0.02em] text-ink md:text-2xl">{heading}</h2>
+          </div>
+
           <button
             type="button"
             onClick={() => setListOpen(true)}
-            className="absolute left-1/2 top-6 z-20 -translate-x-1/2 rounded-full border border-black/10 bg-white/80 px-5 py-2.5 text-sm font-medium text-ink shadow-md backdrop-blur-xl transition hover:border-black/25 md:top-8"
+            className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full border border-black/10 bg-white/80 px-5 py-2.5 text-sm font-medium text-ink shadow-md backdrop-blur-xl transition hover:border-black/25"
           >
             {language === 'tr' ? 'Hepsini Listele' : 'View All'}
           </button>
 
           <div
             ref={panelRef}
-            className="absolute left-6 top-24 max-w-xs cursor-pointer rounded-[24px] border border-black/10 bg-white/75 p-5 shadow-lg backdrop-blur-xl md:left-10 md:top-28"
+            className="absolute left-6 top-40 max-w-xs cursor-pointer rounded-[24px] border border-black/10 bg-white/75 p-5 shadow-lg backdrop-blur-xl md:left-10"
             onClick={() => onSelect(active)}
           >
             <p className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-accent">

@@ -105,6 +105,25 @@ export default function RoadJourney({ projects, language, onSelect }) {
     // instead of sticking, leaving a large empty gap below the scene for
     // however far you'd scrolled into the section. GSAP's pin sidesteps
     // that entirely (same mechanism already used for the hero's pin).
+    //
+    // Outside its active [start, end] range, pinRef is just a normal,
+    // full-viewport-tall (h-screen) block sitting in flow — GSAP doesn't
+    // hide it. Before the pin engages that's a complete, already-fully-
+    // assembled copy of the scene (no reveal), which reads as the whole
+    // road journey suddenly slamming into view right as Experience ends.
+    // After the pin releases, that same block settles at the bottom of the
+    // spacer, i.e. immediately before Education — since the road/hills are
+    // vertically centered in a tall mostly-empty box, only a thin cross-
+    // section of it is actually on screen there, reading as a second,
+    // broken-looking copy of the scene floating above Education. Fading
+    // pinRef out whenever it's not actively pinned (and back in right as
+    // pinning starts/resumes) removes both artifacts.
+    const setSceneVisible = (visible, animate) => {
+      const vars = { autoAlpha: visible ? 1 : 0 };
+      if (animate) gsap.to(pinRef.current, { ...vars, duration: 0.3, ease: 'power1.out', overwrite: true });
+      else gsap.set(pinRef.current, vars);
+    };
+
     const st = ScrollTrigger.create({
       trigger: outerRef.current,
       start: 'top top',
@@ -120,9 +139,14 @@ export default function RoadJourney({ projects, language, onSelect }) {
       scrub: true,
       onUpdate: (self) => update(self.progress),
       onRefreshInit: () => update(0),
+      onEnter: () => setSceneVisible(true, true),
+      onEnterBack: () => setSceneVisible(true, true),
+      onLeave: () => setSceneVisible(false, true),
+      onLeaveBack: () => setSceneVisible(false, true),
     });
     stRef.current = st;
     update(0);
+    setSceneVisible(st.isActive, false);
 
     return () => {
       ro.disconnect();

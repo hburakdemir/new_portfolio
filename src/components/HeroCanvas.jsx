@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initHeroParticles } from '../three/heroParticles';
@@ -28,35 +28,51 @@ const PIN_DISTANCE = 1400;
 const ASSEMBLE_DISTANCE = 1000;
 export default function HeroCanvas({ className = '', xOffset = 0 }) {
   const containerRef = useRef(null);
+  const apiRef = useRef(null);
   const reducedMotion = useReducedMotion();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (reducedMotion || !containerRef.current) return undefined;
 
     const cancelToken = { cancelled: false };
-    let api = null;
-    let trigger = null;
     const container = containerRef.current;
+
+    // Created synchronously, *before* the async WebGL/font work below, and
+    // from useLayoutEffect (not useEffect) so its pin-spacer exists before
+    // any later-mounted section's own ScrollTrigger (e.g. RoadJourney's)
+    // ever measures the page. Creating this pin only after that async work
+    // resolved used to mean every downstream trigger's start/end got
+    // computed against a page still short by PIN_DISTANCE (this section's
+    // spacer didn't exist yet) — confirmed by logging RoadJourney's actual
+    // ScrollTrigger.start, which stayed wrong even after an explicit
+    // ScrollTrigger.refresh() called right after this pin was (belatedly)
+    // created; GSAP doesn't reliably re-measure an already-pinned trigger's
+    // cached start for a function-based `end` on a plain refresh(). onUpdate
+    // just no-ops via apiRef until the particle system is ready.
+    const trigger = ScrollTrigger.create({
+      trigger: '#hero',
+      start: 'top top',
+      end: `+=${PIN_DISTANCE}`,
+      pin: true,
+      scrub: true,
+      onUpdate(self) {
+        apiRef.current?.setAssemble(Math.min(1, self.progress * (PIN_DISTANCE / ASSEMBLE_DISTANCE)));
+      },
+    });
 
     initHeroParticles(container, { theme: 'light', xOffset, cancelToken }).then((result) => {
       if (cancelToken.cancelled || !result) return;
-      api = result;
-      trigger = ScrollTrigger.create({
-        trigger: '#hero',
-        start: 'top top',
-        end: `+=${PIN_DISTANCE}`,
-        pin: true,
-        scrub: true,
-        onUpdate(self) {
-          api.setAssemble(Math.min(1, self.progress * (PIN_DISTANCE / ASSEMBLE_DISTANCE)));
-        },
-      });
+      apiRef.current = result;
+      // Catch up on whatever scroll progress happened while particles were
+      // still loading, instead of snapping straight to it on the next tick.
+      result.setAssemble(Math.min(1, trigger.progress * (PIN_DISTANCE / ASSEMBLE_DISTANCE)));
     });
 
     return () => {
       cancelToken.cancelled = true;
-      trigger?.kill();
-      api?.dispose();
+      trigger.kill();
+      apiRef.current?.dispose();
+      apiRef.current = null;
     };
   }, [reducedMotion, xOffset]);
 

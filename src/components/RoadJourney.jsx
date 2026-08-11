@@ -160,13 +160,13 @@ export default function RoadJourney({ projects, language, onSelect }) {
       start: 'top top',
       end: () => '+=' + (pinDurationVh / 100) * window.innerHeight,
       pin: pinRef.current,
-      // Lenis's smooth-scroll (lerp: 0.1) carries momentum into the pin
-      // boundary — without this, the pin only engages once progress
-      // literally hits 0, by which point the eased scroll has already moved
-      // past it, reading as a sudden snap right as Experience hands off to
-      // Projects. anticipatePin has ScrollTrigger use velocity to start
-      // pinning a beat early so the handoff stays continuous.
-      anticipatePin: 1,
+      // No anticipatePin: it deliberately engages the pin *before* scroll
+      // actually reaches `start` (extrapolated from velocity) to paper over
+      // Lenis's momentum overshooting the boundary. The real fix was
+      // removing the fade so the scene tracks scroll directly (see below);
+      // anticipatePin on top of that just cuts the tail of Experience
+      // short, locking Projects in early — the exact "deneyimler bitmeden
+      // direkt projeler kısmına geçiyor" jump-cut it was meant to prevent.
       scrub: true,
       onUpdate: (self) => update(self.progress),
       onRefreshInit: () => update(0),

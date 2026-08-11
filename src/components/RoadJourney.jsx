@@ -36,7 +36,16 @@ function buildPaths(totalWidth) {
 
 export default function RoadJourney({ projects, language, onSelect }) {
   const N = projects.length;
+  // Full road including the coast-down after the last peak — kept for
+  // drawing only, so the final hill still reads as a real hill rather than
+  // getting chopped off mid-slope at a hard vertical edge.
   const totalWidth = N * SEGMENT;
+  // What the car/track actually travel: stops exactly at the last peak.
+  // Using totalWidth here (the old behavior) let progress reach 1 only once
+  // the car had coasted *past* the last project's peak into the empty valley
+  // beyond it — "son proje bittikten sonra araba tepede kalmalı" (the car
+  // should stay parked on the last project's peak) instead of flying off it.
+  const travelWidth = SEGMENT * (N - 0.5);
 
   const outerRef = useRef(null);
   const pinRef = useRef(null);
@@ -66,10 +75,10 @@ export default function RoadJourney({ projects, language, onSelect }) {
 
     const update = (p) => {
       const vw = viewportWidthRef.current;
-      const trackX = -clamp(p * (totalWidth - vw), 0, Math.max(0, totalWidth - vw));
+      const trackX = -clamp(p * (travelWidth - vw), 0, Math.max(0, travelWidth - vw));
       gsap.set(trackRef.current, { x: trackX });
 
-      const carWorldX = p * totalWidth;
+      const carWorldX = p * travelWidth;
       const carScreenX = clamp(p * vw, 0, vw) - CAR_W / 2;
       const carY = roadY(carWorldX) - CAR_H + 10;
       gsap.set(carOuterRef.current, { x: carScreenX, y: carY });
@@ -101,6 +110,13 @@ export default function RoadJourney({ projects, language, onSelect }) {
       start: 'top top',
       end: 'bottom bottom',
       pin: pinRef.current,
+      // Lenis's smooth-scroll (lerp: 0.1) carries momentum into the pin
+      // boundary — without this, the pin only engages once progress
+      // literally hits 0, by which point the eased scroll has already moved
+      // past it, reading as a sudden snap right as Experience hands off to
+      // Projects. anticipatePin has ScrollTrigger use velocity to start
+      // pinning a beat early so the handoff stays continuous.
+      anticipatePin: 1,
       scrub: true,
       onUpdate: (self) => update(self.progress),
       onRefreshInit: () => update(0),
@@ -113,7 +129,7 @@ export default function RoadJourney({ projects, language, onSelect }) {
       st.kill();
       stRef.current = null;
     };
-  }, [N, totalWidth]);
+  }, [N, totalWidth, travelWidth]);
 
   useEffect(() => {
     if (!panelRef.current) return;
@@ -123,7 +139,9 @@ export default function RoadJourney({ projects, language, onSelect }) {
   const jumpTo = (i) => {
     const st = stRef.current;
     if (!st) return;
-    const p = (i + 0.5) / N;
+    // Matches carWorldX = p * travelWidth so this lands the car exactly on
+    // project i's peak (SEGMENT * (i + 0.5)), not just its 1/N progress slice.
+    const p = (i + 0.5) / (N - 0.5);
     scrollToY(st.start + p * (st.end - st.start));
   };
 

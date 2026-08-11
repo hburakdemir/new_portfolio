@@ -28,15 +28,24 @@ const roadY = (x) => BASE_Y - (AMPLITUDE / 2) * (1 - Math.cos((2 * Math.PI * x) 
 const roadSlope = (x) => (AMPLITUDE / 2) * ((2 * Math.PI) / SEGMENT) * Math.sin((2 * Math.PI * x) / SEGMENT);
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
-function buildPaths(totalWidth) {
+// Draws the road starting CAR_MARGIN world-px *before* x=0 (the car's own
+// start position) so the track's leading edge reaches the screen's left
+// edge at p=0 instead of leaving a CAR_MARGIN-wide gap of bare background —
+// trackX is CAR_MARGIN at p=0 (see `update` below) to keep the car itself
+// off the clipped edge, and that same offset was panning the drawn road
+// away from the edge right along with it ("sol taraf ... yol ve sol kenar
+// arasında boşluk var"). The car's own position is untouched; only the
+// drawn path gets this extra lead-in strip.
+function buildPaths(totalWidth, leadIn) {
   const samplesPerSegment = 28;
-  const steps = Math.max(1, Math.round((totalWidth / SEGMENT) * samplesPerSegment));
-  let road = `M0,${roadY(0).toFixed(1)}`;
+  const drawWidth = totalWidth + leadIn;
+  const steps = Math.max(1, Math.round((drawWidth / SEGMENT) * samplesPerSegment));
+  let road = `M${(-leadIn).toFixed(1)},${roadY(-leadIn).toFixed(1)}`;
   for (let i = 1; i <= steps; i++) {
-    const x = (i / steps) * totalWidth;
+    const x = -leadIn + (i / steps) * drawWidth;
     road += ` L${x.toFixed(1)},${roadY(x).toFixed(1)}`;
   }
-  const ground = `${road} L${totalWidth},${SCENE_H} L0,${SCENE_H} Z`;
+  const ground = `${road} L${totalWidth},${SCENE_H} L${(-leadIn).toFixed(1)},${SCENE_H} Z`;
   return { road, ground };
 }
 
@@ -61,6 +70,7 @@ export default function RoadJourney({ projects, language, onSelect, eyebrow, hea
   const outerRef = useRef(null);
   const pinRef = useRef(null);
   const sceneRef = useRef(null);
+  const stickyHeadingRef = useRef(null);
   const trackRef = useRef(null);
   const carOuterRef = useRef(null);
   const carInnerRef = useRef(null);
@@ -74,7 +84,7 @@ export default function RoadJourney({ projects, language, onSelect, eyebrow, hea
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [listOpen, setListOpen] = useState(false);
-  const [paths] = useState(() => buildPaths(totalWidth));
+  const [paths] = useState(() => buildPaths(totalWidth, CAR_MARGIN));
 
   useLayoutEffect(() => {
     if (!outerRef.current || !pinRef.current || !sceneRef.current) return undefined;
@@ -162,6 +172,18 @@ export default function RoadJourney({ projects, language, onSelect, eyebrow, hea
       gsap.set(sceneRef.current, { autoAlpha: visible ? 1 : 0 });
     };
 
+    // The persistent heading only makes sense once actually locked: sceneRef
+    // scrolls into view naturally well before the pin engages (that's the
+    // whole point of "kayarak inme"), so if the heading were shown any time
+    // sceneRef is merely on screen, it overlapped the real page-level
+    // heading above it for a genuinely long stretch of scroll (measured:
+    // ~760px, not a one-frame blip) instead of a clean handoff. Tying it to
+    // isActive instead means it only appears the instant the swap to locked
+    // actually happens.
+    const setHeadingVisible = (visible) => {
+      gsap.set(stickyHeadingRef.current, { autoAlpha: visible ? 1 : 0 });
+    };
+
     const st = ScrollTrigger.create({
       trigger: outerRef.current,
       start: 'top top',
@@ -179,6 +201,7 @@ export default function RoadJourney({ projects, language, onSelect, eyebrow, hea
       onRefreshInit: () => update(0),
       onEnterBack: () => setSceneVisible(true),
       onLeave: () => setSceneVisible(false),
+      onToggle: (self) => setHeadingVisible(self.isActive),
     });
     stRef.current = st;
     update(0);
@@ -186,6 +209,7 @@ export default function RoadJourney({ projects, language, onSelect, eyebrow, hea
     // a restored scroll position) — otherwise visible by default so it's
     // there to scroll into naturally, pinned or not.
     setSceneVisible(!(st.progress >= 1 && !st.isActive));
+    setHeadingVisible(st.isActive);
 
     return () => {
       ro.disconnect();
@@ -242,7 +266,15 @@ export default function RoadJourney({ projects, language, onSelect, eyebrow, hea
             className="absolute left-0 top-1/2"
             style={{ width: totalWidth, height: SCENE_H, marginTop: -SCENE_H / 2 }}
           >
-            <svg width={totalWidth} height={SCENE_H} viewBox={`0 0 ${totalWidth} ${SCENE_H}`}>
+            {/* overflow: visible so the road's CAR_MARGIN-wide lead-in strip
+                (drawn at negative x, see buildPaths) isn't clipped by the
+                svg's own viewBox. */}
+            <svg
+              width={totalWidth}
+              height={SCENE_H}
+              viewBox={`0 0 ${totalWidth} ${SCENE_H}`}
+              style={{ overflow: 'visible' }}
+            >
               <path d={paths.ground} fill="rgba(0,113,227,0.06)" />
               <path d={paths.road} fill="none" stroke="rgba(29,29,31,0.16)" strokeWidth={22} strokeLinecap="round" strokeLinejoin="round" />
               <path
@@ -289,14 +321,19 @@ export default function RoadJourney({ projects, language, onSelect, eyebrow, hea
           </div>
 
           {/* Mirrors the page-level section heading so it stays on screen
-              the whole time the scene is pinned/locked — the real one lives
-              above this section in normal flow, which is already scrolled
-              out of view by the time the pin engages ("kitlenen ekranda üst
-              tarafta seçili çalışmalar yazısı kalmalı"). top-20 clears the
+              while the scene is pinned/locked — the real one lives above
+              this section in normal flow, which is already scrolled out of
+              view by the time the pin engages ("kitlenen ekranda üst
+              tarafta seçili çalışmalar yazısı kalmalı"). Starts hidden and
+              is toggled by the ScrollTrigger's onToggle (see setHeadingVisible
+              above), not shown unconditionally — sceneRef itself is on
+              screen well before the pin actually engages, so showing this
+              any time sceneRef is merely visible re-created the same overlap
+              with the real heading it's meant to replace. top-20 clears the
               fixed site header (renders ~71px tall) — top-6/top-8, what the
               View All button below used to sit at, put both of them right
               behind it, under its higher z-index. */}
-          <div className="pointer-events-none absolute left-6 top-20 z-10 md:left-10">
+          <div ref={stickyHeadingRef} className="pointer-events-none absolute left-6 top-20 z-10 md:left-10">
             <p className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-muted">{eyebrow}</p>
             <h2 className="mt-1 font-sans text-xl font-bold tracking-[-0.02em] text-ink md:text-2xl">{heading}</h2>
           </div>

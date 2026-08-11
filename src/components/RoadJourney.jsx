@@ -47,8 +47,14 @@ export default function RoadJourney({ projects, language, onSelect }) {
   // should stay parked on the last project's peak) instead of flying off it.
   const travelWidth = SEGMENT * (N - 0.5);
 
+  // Active scrub distance, same magnitude the old `outerRef.height - 100vh`
+  // formula produced — kept identical so pacing through the N hills doesn't
+  // change, only how that distance is reserved (see pinRef below).
+  const pinDurationVh = Math.max(50, N * 45 - 100);
+
   const outerRef = useRef(null);
   const pinRef = useRef(null);
+  const sceneRef = useRef(null);
   const trackRef = useRef(null);
   const carOuterRef = useRef(null);
   const carInnerRef = useRef(null);
@@ -65,13 +71,13 @@ export default function RoadJourney({ projects, language, onSelect }) {
   const [paths] = useState(() => buildPaths(totalWidth));
 
   useLayoutEffect(() => {
-    if (!outerRef.current || !pinRef.current) return undefined;
+    if (!outerRef.current || !pinRef.current || !sceneRef.current) return undefined;
 
     const ro = new ResizeObserver(() => {
-      viewportWidthRef.current = pinRef.current.clientWidth;
+      viewportWidthRef.current = sceneRef.current.clientWidth;
     });
-    ro.observe(pinRef.current);
-    viewportWidthRef.current = pinRef.current.clientWidth;
+    ro.observe(sceneRef.current);
+    viewportWidthRef.current = sceneRef.current.clientWidth;
 
     const update = (p) => {
       const vw = viewportWidthRef.current;
@@ -106,28 +112,32 @@ export default function RoadJourney({ projects, language, onSelect }) {
     // however far you'd scrolled into the section. GSAP's pin sidesteps
     // that entirely (same mechanism already used for the hero's pin).
     //
-    // Outside its active [start, end] range, pinRef is just a normal,
-    // full-viewport-tall (h-screen) block sitting in flow — GSAP doesn't
-    // hide it. Before the pin engages that's a complete, already-fully-
-    // assembled copy of the scene (no reveal), which reads as the whole
-    // road journey suddenly slamming into view right as Experience ends.
-    // After the pin releases, that same block settles at the bottom of the
-    // spacer, i.e. immediately before Education — since the road/hills are
-    // vertically centered in a tall mostly-empty box, only a thin cross-
-    // section of it is actually on screen there, reading as a second,
-    // broken-looking copy of the scene floating above Education. Fading
-    // pinRef out whenever it's not actively pinned (and back in right as
-    // pinning starts/resumes) removes both artifacts.
+    // pinRef itself (the thing GSAP pins) is a near-zero-height anchor, not
+    // the visible h-screen scene — that's sceneRef, an absolutely-positioned
+    // child of pinRef instead. This split matters because GSAP's pin-spacer
+    // always reserves `pinRef's own unpinned height + the scrub distance` of
+    // real scroll room, no matter what `pin` targets. With pinRef sized to
+    // the h-screen scene (the old setup), that reserved a full extra
+    // viewport of scroll for nothing: before the pin engaged it showed the
+    // scene fully pre-assembled with no reveal (reading as the whole road
+    // journey slamming into view right as Experience ends), and after the
+    // pin released that same block settled right before Education as dead
+    // space. Since sceneRef is absolutely positioned, it costs pinRef
+    // nothing — pinRef stays ~0px, so the spacer reserves almost exactly the
+    // scrub distance and nothing more. `end` is likewise given directly in
+    // pixels (matching HeroCanvas's pin) instead of derived from an outer
+    // wrapper's own height, since that derivation is what silently pulled
+    // pinRef's full height into the reserved distance in the first place.
     const setSceneVisible = (visible, animate) => {
       const vars = { autoAlpha: visible ? 1 : 0 };
-      if (animate) gsap.to(pinRef.current, { ...vars, duration: 0.3, ease: 'power1.out', overwrite: true });
-      else gsap.set(pinRef.current, vars);
+      if (animate) gsap.to(sceneRef.current, { ...vars, duration: 0.3, ease: 'power1.out', overwrite: true });
+      else gsap.set(sceneRef.current, vars);
     };
 
     const st = ScrollTrigger.create({
       trigger: outerRef.current,
       start: 'top top',
-      end: 'bottom bottom',
+      end: () => '+=' + (pinDurationVh / 100) * window.innerHeight,
       pin: pinRef.current,
       // Lenis's smooth-scroll (lerp: 0.1) carries momentum into the pin
       // boundary — without this, the pin only engages once progress
@@ -153,7 +163,7 @@ export default function RoadJourney({ projects, language, onSelect }) {
       st.kill();
       stRef.current = null;
     };
-  }, [N, totalWidth, travelWidth]);
+  }, [N, totalWidth, travelWidth, pinDurationVh]);
 
   useEffect(() => {
     if (!panelRef.current) return;
@@ -194,120 +204,123 @@ export default function RoadJourney({ projects, language, onSelect }) {
   const active = projects[activeIndex];
 
   return (
-    <div ref={outerRef} style={{ height: `${N * 45}vh` }} className="relative">
-      <div ref={pinRef} className="h-screen w-full overflow-hidden bg-paper">
-        <div
-          ref={trackRef}
-          className="absolute left-0 top-1/2"
-          style={{ width: totalWidth, height: SCENE_H, marginTop: -SCENE_H / 2 }}
-        >
-          <svg width={totalWidth} height={SCENE_H} viewBox={`0 0 ${totalWidth} ${SCENE_H}`}>
-            <path d={paths.ground} fill="rgba(0,113,227,0.06)" />
-            <path d={paths.road} fill="none" stroke="rgba(29,29,31,0.16)" strokeWidth={22} strokeLinecap="round" strokeLinejoin="round" />
-            <path
-              d={paths.road}
-              fill="none"
-              stroke="rgba(255,255,255,0.9)"
-              strokeWidth={2}
-              strokeDasharray="14 16"
-              strokeLinecap="round"
-            />
-          </svg>
-
-          {projects.map((project, i) => {
-            const peakX = SEGMENT * (i + 0.5);
-            return (
-              <button
-                key={project.id}
-                type="button"
-                onClick={() => jumpTo(i)}
-                className="absolute -translate-x-1/2 whitespace-nowrap rounded-full border border-black/10 bg-white/75 px-3 py-1.5 text-xs font-medium text-ink shadow-sm backdrop-blur-md transition hover:border-accent/40 hover:text-accent"
-                style={{ left: peakX, top: SCENE_H - 40 }}
-              >
-                {project.title[language]}
-              </button>
-            );
-          })}
-        </div>
-
-        <div
-          className="pointer-events-none absolute left-0 top-1/2 w-full"
-          style={{ height: SCENE_H, marginTop: -SCENE_H / 2 }}
-        >
+    <div ref={outerRef} className="relative">
+      {/* GSAP's pin target: kept ~0px tall on purpose, see the pin setup comment above. */}
+      <div ref={pinRef} className="relative w-full" style={{ height: 1 }}>
+        <div ref={sceneRef} className="absolute inset-x-0 top-0 h-screen w-full overflow-hidden bg-paper">
           <div
-            ref={carOuterRef}
-            className="pointer-events-auto absolute left-0 top-0 cursor-grab touch-none active:cursor-grabbing"
-            style={{ width: CAR_W, height: CAR_H }}
-            onPointerDown={onCarPointerDown}
-            onPointerMove={onCarPointerMove}
-            onPointerUp={onCarPointerUp}
-            onPointerLeave={onCarPointerUp}
+            ref={trackRef}
+            className="absolute left-0 top-1/2"
+            style={{ width: totalWidth, height: SCENE_H, marginTop: -SCENE_H / 2 }}
           >
-            <CarIcon innerRef={carInnerRef} width={CAR_W} height={CAR_H} />
-          </div>
-        </div>
+            <svg width={totalWidth} height={SCENE_H} viewBox={`0 0 ${totalWidth} ${SCENE_H}`}>
+              <path d={paths.ground} fill="rgba(0,113,227,0.06)" />
+              <path d={paths.road} fill="none" stroke="rgba(29,29,31,0.16)" strokeWidth={22} strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d={paths.road}
+                fill="none"
+                stroke="rgba(255,255,255,0.9)"
+                strokeWidth={2}
+                strokeDasharray="14 16"
+                strokeLinecap="round"
+              />
+            </svg>
 
-        <button
-          type="button"
-          onClick={() => setListOpen(true)}
-          className="absolute left-1/2 top-6 z-20 -translate-x-1/2 rounded-full border border-black/10 bg-white/80 px-5 py-2.5 text-sm font-medium text-ink shadow-md backdrop-blur-xl transition hover:border-black/25 md:top-8"
-        >
-          {language === 'tr' ? 'Hepsini Listele' : 'View All'}
-        </button>
-
-        <div
-          ref={panelRef}
-          className="absolute left-6 top-24 max-w-xs cursor-pointer rounded-[24px] border border-black/10 bg-white/75 p-5 shadow-lg backdrop-blur-xl md:left-10 md:top-28"
-          onClick={() => onSelect(active)}
-        >
-          <p className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-accent">
-            {active.category[language]}
-          </p>
-          <h3 className="mt-1 font-sans text-lg font-semibold text-ink">{active.title[language]}</h3>
-          <span className="mt-3 inline-block text-sm font-medium text-accent">
-            {language === 'tr' ? 'İncele' : 'View'} <span aria-hidden="true">&gt;</span>
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => scrollToHash('#education', { duration: 2.2 })}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-black/10 bg-white/80 px-5 py-2.5 text-sm font-medium text-ink shadow-md backdrop-blur-xl transition hover:border-black/25"
-        >
-          {language === 'tr' ? 'Geç' : 'Skip'} <span aria-hidden="true">&gt;&gt;</span>
-        </button>
-
-        {listOpen && (
-          <div
-            className="absolute inset-0 z-30 flex items-center justify-center bg-black/30 backdrop-blur-sm"
-            onClick={() => setListOpen(false)}
-          >
-            <div
-              className="max-h-[70vh] w-full max-w-sm overflow-y-auto rounded-[24px] border border-black/10 bg-white/95 p-3 shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {projects.map((project, i) => (
+            {projects.map((project, i) => {
+              const peakX = SEGMENT * (i + 0.5);
+              return (
                 <button
                   key={project.id}
                   type="button"
-                  onClick={() => {
-                    setListOpen(false);
-                    onSelect(project);
-                  }}
-                  className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-black/[0.04]"
+                  onClick={() => jumpTo(i)}
+                  className="absolute -translate-x-1/2 whitespace-nowrap rounded-full border border-black/10 bg-white/75 px-3 py-1.5 text-xs font-medium text-ink shadow-sm backdrop-blur-md transition hover:border-accent/40 hover:text-accent"
+                  style={{ left: peakX, top: SCENE_H - 40 }}
                 >
-                  <span>
-                    <span className="block text-[0.65rem] font-medium uppercase tracking-[0.1em] text-accent">
-                      {project.category[language]}
-                    </span>
-                    <span className="mt-0.5 block text-sm font-medium text-ink">{project.title[language]}</span>
-                  </span>
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${i === activeIndex ? 'bg-accent' : 'bg-black/15'}`} />
+                  {project.title[language]}
                 </button>
-              ))}
+              );
+            })}
+          </div>
+
+          <div
+            className="pointer-events-none absolute left-0 top-1/2 w-full"
+            style={{ height: SCENE_H, marginTop: -SCENE_H / 2 }}
+          >
+            <div
+              ref={carOuterRef}
+              className="pointer-events-auto absolute left-0 top-0 cursor-grab touch-none active:cursor-grabbing"
+              style={{ width: CAR_W, height: CAR_H }}
+              onPointerDown={onCarPointerDown}
+              onPointerMove={onCarPointerMove}
+              onPointerUp={onCarPointerUp}
+              onPointerLeave={onCarPointerUp}
+            >
+              <CarIcon innerRef={carInnerRef} width={CAR_W} height={CAR_H} />
             </div>
           </div>
-        )}
+
+          <button
+            type="button"
+            onClick={() => setListOpen(true)}
+            className="absolute left-1/2 top-6 z-20 -translate-x-1/2 rounded-full border border-black/10 bg-white/80 px-5 py-2.5 text-sm font-medium text-ink shadow-md backdrop-blur-xl transition hover:border-black/25 md:top-8"
+          >
+            {language === 'tr' ? 'Hepsini Listele' : 'View All'}
+          </button>
+
+          <div
+            ref={panelRef}
+            className="absolute left-6 top-24 max-w-xs cursor-pointer rounded-[24px] border border-black/10 bg-white/75 p-5 shadow-lg backdrop-blur-xl md:left-10 md:top-28"
+            onClick={() => onSelect(active)}
+          >
+            <p className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-accent">
+              {active.category[language]}
+            </p>
+            <h3 className="mt-1 font-sans text-lg font-semibold text-ink">{active.title[language]}</h3>
+            <span className="mt-3 inline-block text-sm font-medium text-accent">
+              {language === 'tr' ? 'İncele' : 'View'} <span aria-hidden="true">&gt;</span>
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => scrollToHash('#education', { duration: 2.2 })}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-black/10 bg-white/80 px-5 py-2.5 text-sm font-medium text-ink shadow-md backdrop-blur-xl transition hover:border-black/25"
+          >
+            {language === 'tr' ? 'Geç' : 'Skip'} <span aria-hidden="true">&gt;&gt;</span>
+          </button>
+
+          {listOpen && (
+            <div
+              className="absolute inset-0 z-30 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+              onClick={() => setListOpen(false)}
+            >
+              <div
+                className="max-h-[70vh] w-full max-w-sm overflow-y-auto rounded-[24px] border border-black/10 bg-white/95 p-3 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {projects.map((project, i) => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => {
+                      setListOpen(false);
+                      onSelect(project);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-black/[0.04]"
+                  >
+                    <span>
+                      <span className="block text-[0.65rem] font-medium uppercase tracking-[0.1em] text-accent">
+                        {project.category[language]}
+                      </span>
+                      <span className="mt-0.5 block text-sm font-medium text-ink">{project.title[language]}</span>
+                    </span>
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${i === activeIndex ? 'bg-accent' : 'bg-black/15'}`} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

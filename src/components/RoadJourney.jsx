@@ -17,6 +17,12 @@ const CAR_W = 76;
 const CAR_H = 42;
 const TILT_DAMPING = 0.55; // keeps the car's uphill/downhill lean subtle
 const MAX_TILT = 24;
+// Keeps the car (and some breathing room) fully on-screen at both ends of
+// the journey — the car's screen position used to span the full [0, vw]
+// width edge-to-edge, so at p=0/1 it sat centered *on* the viewport edge,
+// half clipped off. Well under SEGMENT/2 (260) so the extra track panned
+// into view at p=1 stays inside the drawn road instead of its blank tail.
+const CAR_MARGIN = 120;
 
 const roadY = (x) => BASE_Y - (AMPLITUDE / 2) * (1 - Math.cos((2 * Math.PI * x) / SEGMENT));
 const roadSlope = (x) => (AMPLITUDE / 2) * ((2 * Math.PI) / SEGMENT) * Math.sin((2 * Math.PI * x) / SEGMENT);
@@ -81,11 +87,17 @@ export default function RoadJourney({ projects, language, onSelect }) {
 
     const update = (p) => {
       const vw = viewportWidthRef.current;
-      const trackX = -clamp(p * (travelWidth - vw), 0, Math.max(0, travelWidth - vw));
+      const clampedP = clamp(p, 0, 1);
+      // Car's screen center rides from CAR_MARGIN to vw-CAR_MARGIN (not 0 to
+      // vw) as p goes 0→1; the track pans by exactly enough to keep the
+      // car's *world* position (p * travelWidth) under that screen point,
+      // so it still visually rides the road, just never at the raw edge.
+      const carCenterX = CAR_MARGIN + clampedP * Math.max(0, vw - 2 * CAR_MARGIN);
+      const carWorldX = p * travelWidth;
+      const trackX = carCenterX - carWorldX;
       gsap.set(trackRef.current, { x: trackX });
 
-      const carWorldX = p * travelWidth;
-      const carScreenX = clamp(p * vw, 0, vw) - CAR_W / 2;
+      const carScreenX = carCenterX - CAR_W / 2;
       const carY = roadY(carWorldX) - CAR_H + 10;
       gsap.set(carOuterRef.current, { x: carScreenX, y: carY });
 
@@ -118,16 +130,25 @@ export default function RoadJourney({ projects, language, onSelect }) {
     // always reserves `pinRef's own unpinned height + the scrub distance` of
     // real scroll room, no matter what `pin` targets. With pinRef sized to
     // the h-screen scene (the old setup), that reserved a full extra
-    // viewport of scroll for nothing: before the pin engaged it showed the
-    // scene fully pre-assembled with no reveal (reading as the whole road
-    // journey slamming into view right as Experience ends), and after the
-    // pin released that same block settled right before Education as dead
-    // space. Since sceneRef is absolutely positioned, it costs pinRef
-    // nothing — pinRef stays ~0px, so the spacer reserves almost exactly the
-    // scrub distance and nothing more. `end` is likewise given directly in
-    // pixels (matching HeroCanvas's pin) instead of derived from an outer
-    // wrapper's own height, since that derivation is what silently pulled
-    // pinRef's full height into the reserved distance in the first place.
+    // viewport of scroll that settled right after the pin released as dead
+    // space before Education. Since sceneRef is absolutely positioned, it
+    // costs pinRef nothing — pinRef stays ~0px, so the spacer reserves
+    // almost exactly the scrub distance and nothing more. `end` is likewise
+    // given directly in pixels (matching HeroCanvas's pin) instead of
+    // derived from an outer wrapper's own height, since that derivation is
+    // what silently pulled pinRef's full height into the reserved distance.
+    //
+    // Being absolutely positioned against pinRef doesn't stop sceneRef from
+    // scrolling into view completely normally before the pin ever engages —
+    // pinRef sits at a fixed, static document position until pinning starts,
+    // so sceneRef (anchored to it) rides the page up at the same 1:1 rate as
+    // every other section, "kayarak inme" (a normal scroll-in), and only
+    // *locks* the instant the pin takes over. The one place that natural
+    // flow breaks is the far side: once unpinned past `end`, sceneRef would
+    // otherwise sit right on top of Education (nothing pushes Education down
+    // for it, since it's absolutely positioned) — so it's explicitly hidden
+    // only there, and only there, restored the moment you scroll back up
+    // into range.
     const setSceneVisible = (visible, animate) => {
       const vars = { autoAlpha: visible ? 1 : 0 };
       if (animate) gsap.to(sceneRef.current, { ...vars, duration: 0.3, ease: 'power1.out', overwrite: true });
@@ -149,14 +170,15 @@ export default function RoadJourney({ projects, language, onSelect }) {
       scrub: true,
       onUpdate: (self) => update(self.progress),
       onRefreshInit: () => update(0),
-      onEnter: () => setSceneVisible(true, true),
       onEnterBack: () => setSceneVisible(true, true),
       onLeave: () => setSceneVisible(false, true),
-      onLeaveBack: () => setSceneVisible(false, true),
     });
     stRef.current = st;
     update(0);
-    setSceneVisible(st.isActive, false);
+    // Hidden only if the page is already scrolled past `end` on mount (e.g.
+    // a restored scroll position) — otherwise visible by default so it's
+    // there to scroll into naturally, pinned or not.
+    setSceneVisible(!(st.progress >= 1 && !st.isActive), false);
 
     return () => {
       ro.disconnect();
